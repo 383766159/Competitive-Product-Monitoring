@@ -1,0 +1,89 @@
+{
+  "name": "amazon-competitor-tracker",
+  "version": "1.0.0",
+  "description": "Amazon 竞品页面抓取与价格追踪工具",
+  "main": "dist-electron/main.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "predev": "node scripts/build-electron.mjs",
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:127.0.0.1:5173 && electron .\"",
+    "build:renderer": "node scripts/pre-release-clean.mjs && vite build",
+    "build:electron": "node scripts/build-electron.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "prepack:win": "node scripts/pre-release-clean.mjs",
+    "build": "npm run build:renderer && npm run build:electron && npm run prepack:win && electron-builder --win dir zip",
+    "release": "npm run build:renderer && npm run build:electron && npm run pack:browsers && npm run prepack:win && electron-builder --win dir zip",
+    "postinstall": "playwright install chromium",
+    "setup:browsers": "playwright install chromium",
+    "pack:browsers": "node scripts/pack-playwright-browsers.mjs"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "playwright": "^1.49.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.amazoncompetitortracker.app",
+    "productName": "AmazonCompetitorTracker",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/renderer/**/*",
+      "dist-electron/**/*",
+      "!node_modules/playwright/.local-browsers/**/*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "**/node_modules/playwright/**/*",
+      "**/node_modules/playwright-core/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "playwright-browsers",
+        "to": "playwright-browsers",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "forceCodeSigning": false,
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    }
+  }
+}

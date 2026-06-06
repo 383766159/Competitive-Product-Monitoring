@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-electron/
+release/
+playwright-browsers/
+*.log
+logs/
+data/
+config.json
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
