@@ -5,12 +5,24 @@
 @layer base {
   :root {
     color-scheme: dark;
-    --bg: #08111f;
-    --panel: rgba(7, 14, 28, 0.82);
-    --line: rgba(148, 163, 184, 0.16);
-    --text: #e5ecf6;
-    --muted: #8fa1b8;
-    --accent: #f3b45c;
+    --bg-canvas: oklch(0.17 0.02 255);
+    --bg-elevated: oklch(0.22 0.024 252);
+    --surface-1: oklch(0.25 0.022 252 / 0.9);
+    --surface-2: oklch(0.29 0.022 252 / 0.88);
+    --surface-3: oklch(0.34 0.02 248 / 0.9);
+    --line-soft: oklch(0.56 0.02 248 / 0.24);
+    --line-strong: oklch(0.72 0.03 245 / 0.34);
+    --text-primary: oklch(0.95 0.01 255);
+    --text-secondary: oklch(0.78 0.018 248);
+    --text-muted: oklch(0.64 0.018 248);
+    --accent: oklch(0.73 0.09 236);
+    --accent-soft: oklch(0.73 0.09 236 / 0.14);
+    --success-soft: oklch(0.78 0.1 162 / 0.16);
+    --danger-soft: oklch(0.67 0.16 23 / 0.14);
+    --field-bg: oklch(0.2 0.018 255 / 0.94);
+    --field-border: oklch(0.54 0.02 248 / 0.26);
+    --focus-ring: oklch(0.78 0.08 232 / 0.34);
+    --surface-shadow: 0 22px 70px rgba(2, 6, 23, 0.34);
   }
 
   * {
@@ -19,19 +31,19 @@
 
   html {
     background:
-      radial-gradient(circle at top left, rgba(243, 180, 92, 0.18), transparent 28%),
-      radial-gradient(circle at top right, rgba(65, 102, 173, 0.18), transparent 22%),
-      linear-gradient(180deg, #07101d 0%, #091424 100%);
+      radial-gradient(circle at top left, oklch(0.42 0.09 235 / 0.18), transparent 30%),
+      radial-gradient(circle at top right, oklch(0.44 0.05 200 / 0.12), transparent 22%),
+      linear-gradient(180deg, oklch(0.15 0.02 255) 0%, oklch(0.18 0.018 252) 100%);
   }
 
   body {
     margin: 0;
     min-height: 100vh;
-    color: var(--text);
+    color: var(--text-primary);
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%),
-      linear-gradient(135deg, rgba(243, 180, 92, 0.06), transparent 40%),
-      var(--bg);
+      linear-gradient(180deg, oklch(0.96 0.01 255 / 0.02), transparent 18%),
+      radial-gradient(circle at 50% 0%, oklch(0.44 0.08 235 / 0.08), transparent 36%),
+      var(--bg-canvas);
     font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", sans-serif;
   }
 
@@ -44,10 +56,80 @@
   textarea,
   select {
     font: inherit;
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      color 160ms ease;
+  }
+
+  button {
+    border: 1px solid var(--field-border);
+    color: var(--text-primary);
+    background: var(--surface-2);
+  }
+
+  button:hover {
+    background: var(--surface-3);
+    border-color: var(--line-strong);
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+  }
+
+  input,
+  textarea,
+  select {
+    color: var(--text-primary);
+    background: var(--field-bg);
+    border: 1px solid var(--field-border);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-muted);
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--focus-ring);
   }
 
   ::selection {
-    background: rgba(243, 180, 92, 0.28);
-    color: #fff6e8;
+    background: oklch(0.73 0.09 236 / 0.28);
+    color: oklch(0.98 0.01 250);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.42 0.018 248 / 0.72);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .surface-card {
+    border: 1px solid var(--line-soft);
+    background:
+      linear-gradient(180deg, oklch(0.34 0.022 245 / 0.12), transparent 26%),
+      var(--surface-1);
+    box-shadow: var(--surface-shadow);
+    backdrop-filter: blur(18px);
   }
 }

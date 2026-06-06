@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CommandCenterView } from './features/command-center/components/CommandCenterView';
+import type { AmazonMarketplace, AsinGroup, UserConfig } from './features/command-center/model';
+import {
+  getCommandGroupItems,
+  getRunnableGroups,
+  getSelectableGroupIds,
+} from './features/command-center/selectors';
+import { buildCommandSummary, getSyncBlockReason, parseAsinText } from './features/command-center/utils';
+import { CrawlerSettingsPanel } from './features/settings/components/CrawlerSettingsPanel';
+import { GroupEditorPanel } from './features/settings/components/GroupEditorPanel';
 import { previewExcelPath } from './previewExcelPath';
-
-type AsinGroup = {
-  id: string;
-  name: string;
-  asins: string[];
-};
-
-type AmazonMarketplace = 'us' | 'de' | 'fr' | 'it' | 'es';
+import { SurfaceCard } from './shared/ui/SurfaceCard';
 
 const MARKETPLACE_OPTIONS: Array<{ code: AmazonMarketplace; label: string; host: string }> = [
   { code: 'us', label: '美国', host: 'amazon.com' },
@@ -17,43 +20,31 @@ const MARKETPLACE_OPTIONS: Array<{ code: AmazonMarketplace; label: string; host:
   { code: 'es', label: '西班牙', host: 'amazon.es' },
 ];
 
-type UserConfig = {
-  headless: boolean;
-  marketplace: AmazonMarketplace;
-  zipCode: string;
-  zipHomeWaitSec: number;
-  zipModalWaitSec: number;
-  locale: 'en-US';
-  activeGroupId: string;
-  groups: AsinGroup[];
+type ActivityLogEntry = {
+  message: string;
+  level: 'info' | 'issue';
 };
+
+type SyncStage = 'idle' | 'saving' | 'syncing';
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function formatSaveError(error: string | unknown): string {
+  return `保存配置失败：${typeof error === 'string' ? error : getErrorMessage(error)}`;
+}
+
+function formatLoadError(error: string | unknown): string {
+  return `加载配置失败：${typeof error === 'string' ? error : getErrorMessage(error)}`;
+}
+
+function formatResetDefaultsError(error: string | unknown): string {
+  return `恢复默认配置失败：${typeof error === 'string' ? error : getErrorMessage(error)}`;
+}
 
 function newGroupId(): string {
   return crypto.randomUUID();
-}
-
-function parseAsinText(text: string): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-
-  const push = (raw: string) => {
-    const urlMatch = raw.match(/(?:\/(?:dp|gp\/product)\/|[?&]asin=)([A-Z0-9]{10})(?:[^A-Z0-9]|$)/i);
-    const asin = (urlMatch?.[1] ?? raw).trim().toUpperCase();
-    if (/^[A-Z0-9]{10}$/.test(asin) && !seen.has(asin)) {
-      seen.add(asin);
-      out.push(asin);
-    }
-  };
-
-  const urlRe = /(?:\/(?:dp|gp\/product)\/|[?&]asin=)([A-Z0-9]{10})(?:[^A-Z0-9]|$)/gi;
-  let match: RegExpExecArray | null;
-  while ((match = urlRe.exec(text)) !== null) push(match[1]);
-
-  text
-    .split(/[\s,，、\n\r]+/)
-    .filter(Boolean)
-    .forEach(push);
-  return out;
 }
 
 export default function App() {
@@ -64,29 +55,20 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editName, setEditName] = useState('');
   const [editAsinText, setEditAsinText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [syncStage, setSyncStage] = useState<SyncStage>('idle');
+  const [activityEntries, setActivityEntries] = useState<ActivityLogEntry[]>([]);
   const [lastDone, setLastDone] = useState<string | null>(null);
   const [preloadError, setPreloadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saveHint, setSaveHint] = useState<string | null>(null);
   const [tab, setTab] = useState<'sync' | 'settings'>('sync');
-  const logEndRef = useRef<HTMLSpanElement>(null);
+  const syncInFlightRef = useRef(false);
 
   const tracker = typeof window !== 'undefined' ? window.tracker : undefined;
 
-  const pushLog = useCallback((line: string) => {
-    setLogs((prev) => [...prev.slice(-399), line]);
+  const pushLog = useCallback((message: string, level: ActivityLogEntry['level'] = 'info') => {
+    setActivityEntries((prev) => [...prev.slice(-399), { message, level }]);
   }, []);
-
-  const editingGroup = useMemo(
-    () => config?.groups.find((group) => group.id === config.activeGroupId) ?? config?.groups[0],
-    [config],
-  );
-
-  const syncSelectedGroups = useMemo(() => {
-    if (!config) return [];
-    return config.groups.filter((group) => selectedIds.has(group.id) && group.asins.length > 0);
-  }, [config, selectedIds]);
 
   const applyEditingGroupToForm = useCallback((group: AsinGroup | undefined) => {
     if (!group) return;
@@ -96,12 +78,17 @@ export default function App() {
 
   const loadSettings = useCallback(async () => {
     if (!tracker) return;
-    const [cfg, nextPaths] = await Promise.all([tracker.getConfig(), tracker.getPaths()]);
-    setConfig(cfg);
-    setPaths(nextPaths);
-    const group = cfg.groups.find((item) => item.id === cfg.activeGroupId) ?? cfg.groups[0];
-    applyEditingGroupToForm(group);
-    setSelectedIds(new Set(cfg.groups.filter((item) => item.asins.length > 0).map((item) => item.id)));
+    setLoadError(null);
+    try {
+      const [cfg, nextPaths] = await Promise.all([tracker.getConfig(), tracker.getPaths()]);
+      setConfig(cfg);
+      setPaths(nextPaths);
+      const group = cfg.groups.find((item) => item.id === cfg.activeGroupId) ?? cfg.groups[0];
+      applyEditingGroupToForm(group);
+      setSelectedIds(new Set(getSelectableGroupIds(cfg)));
+    } catch (error) {
+      setLoadError(formatLoadError(error));
+    }
   }, [tracker, applyEditingGroupToForm]);
 
   useEffect(() => {
@@ -115,6 +102,12 @@ export default function App() {
   }, [tracker, loadSettings]);
 
   useEffect(() => {
+    if (syncStage !== 'idle' && tab === 'settings') {
+      setTab('sync');
+    }
+  }, [syncStage, tab]);
+
+  useEffect(() => {
     if (!tracker) return;
     const off = tracker.onSyncProgress((progress) => {
       if (progress.type === 'log' && progress.message) pushLog(progress.message);
@@ -123,14 +116,10 @@ export default function App() {
       if (progress.type === 'asin-start' && progress.asin) pushLog(`  -> 抓取 ${progress.asin}`);
       if (progress.type === 'asin-done' && progress.asin) pushLog(`  完成 ${progress.asin}`);
       if (progress.type === 'done' && progress.message) setLastDone(progress.message);
-      if (progress.type === 'error' && progress.message) pushLog(`错误: ${progress.message}`);
+      if (progress.type === 'error' && progress.message) pushLog(`错误: ${progress.message}`, 'issue');
     });
     return off;
   }, [tracker, pushLog]);
-
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
 
   function mergeEditingIntoConfig(base: UserConfig): UserConfig {
     const asins = parseAsinText(editAsinText);
@@ -148,11 +137,73 @@ export default function App() {
     };
   }
 
+  const effectiveConfig = useMemo(() => (config ? mergeEditingIntoConfig(config) : null), [config, editAsinText, editName]);
+
+  const editingGroup = useMemo(
+    () =>
+      effectiveConfig?.groups.find((group) => group.id === effectiveConfig.activeGroupId) ?? effectiveConfig?.groups[0],
+    [effectiveConfig],
+  );
+
+  const selectableGroupIds = useMemo(() => getSelectableGroupIds(effectiveConfig), [effectiveConfig]);
+
+  const syncSelectedGroups = useMemo(
+    () => getRunnableGroups(effectiveConfig, selectedIds),
+    [effectiveConfig, selectedIds],
+  );
+
+  const commandGroupItems = useMemo(
+    () => getCommandGroupItems(effectiveConfig, selectedIds),
+    [effectiveConfig, selectedIds],
+  );
+
+  const syncBlockReason = useMemo(
+    () => getSyncBlockReason(effectiveConfig, selectedIds, syncStage !== 'idle'),
+    [effectiveConfig, selectedIds, syncStage],
+  );
+
+  const commandSummary = useMemo(
+    () => {
+      if (!effectiveConfig) return null;
+      if (syncStage === 'saving') {
+        return {
+          title: `正在准备同步 ${syncSelectedGroups.length} 个分组`,
+          detail: '正在保存最新配置，完成后会自动开始同步任务。',
+          actionLabel: '准备同步中',
+        };
+      }
+      return buildCommandSummary(effectiveConfig, syncSelectedGroups, syncStage === 'syncing');
+    },
+    [effectiveConfig, syncSelectedGroups, syncStage],
+  );
+
+  const activityLogs = useMemo(() => activityEntries.map((entry) => entry.message), [activityEntries]);
+
+  const issueLogs = useMemo(
+    () =>
+      activityEntries
+        .filter((entry) => entry.level === 'issue')
+        .map((entry) => entry.message)
+        .slice(-3)
+        .reverse(),
+    [activityEntries],
+  );
+
   function onSelectEditingGroup(id: string) {
     if (!config) return;
     const next = { ...mergeEditingIntoConfig(config), activeGroupId: id };
     setConfig(next);
     applyEditingGroupToForm(next.groups.find((group) => group.id === id));
+    setSaveHint(null);
+  }
+
+  function onEditNameChange(value: string) {
+    setEditName(value);
+    setSaveHint(null);
+  }
+
+  function onEditAsinTextChange(value: string) {
+    setEditAsinText(value);
     setSaveHint(null);
   }
 
@@ -166,8 +217,7 @@ export default function App() {
   }
 
   function selectAllWithAsins() {
-    if (!config) return;
-    setSelectedIds(new Set(config.groups.filter((group) => group.asins.length > 0).map((group) => group.id)));
+    setSelectedIds(new Set(selectableGroupIds));
   }
 
   function clearSelection() {
@@ -204,86 +254,156 @@ export default function App() {
   }
 
   async function onSaveConfig() {
-    if (!tracker || !config) return;
+    if (!tracker || !effectiveConfig || syncStage !== 'idle') return;
     setSaveHint(null);
-    const payload = mergeEditingIntoConfig(config);
-    const result = await tracker.saveConfig(payload);
-    if (!result.ok) {
-      setSaveHint(result.error);
-      return;
+    try {
+      const result = await tracker.saveConfig(effectiveConfig);
+      if (!result.ok) {
+        setSaveHint(formatSaveError(result.error));
+        return;
+      }
+      setSaveHint('设置已保存到 config.json');
+      await loadSettings();
+    } catch (error) {
+      setSaveHint(formatSaveError(error));
     }
-    setSaveHint('设置已保存到 config.json');
-    await loadSettings();
   }
 
   async function onResetDefaults() {
-    if (!tracker) return;
-    const defaults = await tracker.getDefaultConfig();
-    setConfig(defaults);
-    applyEditingGroupToForm(defaults.groups[0]);
-    setSelectedIds(new Set(defaults.groups.filter((group) => group.asins.length > 0).map((group) => group.id)));
-    setSaveHint('已恢复默认配置，请点击“保存设置”写入磁盘。');
+    if (!tracker || syncStage !== 'idle') return;
+    try {
+      const defaults = await tracker.getDefaultConfig();
+      setConfig(defaults);
+      applyEditingGroupToForm(defaults.groups[0]);
+      setSelectedIds(new Set(getSelectableGroupIds(defaults)));
+      setSaveHint('已恢复默认配置，请点击“保存设置”写入磁盘。');
+    } catch (error) {
+      setSaveHint(formatResetDefaultsError(error));
+    }
+  }
+
+  function onMarketplaceChange(value: AmazonMarketplace) {
+    if (!config) return;
+    setConfig({ ...config, marketplace: value });
+    setSaveHint(null);
+  }
+
+  function onHeadedChange(value: boolean) {
+    if (!config) return;
+    setConfig({ ...config, headless: !value });
+    setSaveHint(null);
+  }
+
+  function onZipCodeChange(value: string) {
+    if (!config) return;
+    setConfig({ ...config, zipCode: value.replace(/\D/g, '').slice(0, 5) });
+    setSaveHint(null);
+  }
+
+  function onZipHomeWaitSecChange(value: number) {
+    if (!config) return;
+    setConfig({
+      ...config,
+      zipHomeWaitSec: Math.min(120, Math.max(0, Number.isFinite(value) ? value : 0)),
+    });
+    setSaveHint(null);
+  }
+
+  function onZipModalWaitSecChange(value: number) {
+    if (!config) return;
+    setConfig({
+      ...config,
+      zipModalWaitSec: Math.min(120, Math.max(0, Number.isFinite(value) ? value : 0)),
+    });
+    setSaveHint(null);
   }
 
   async function onSync() {
-    if (!config || !tracker) return;
-    const runnable = syncSelectedGroups;
+    if (!effectiveConfig || !tracker || syncInFlightRef.current) return;
+    const runnable = getRunnableGroups(effectiveConfig, selectedIds);
     if (runnable.length === 0) {
       setSaveHint('请在同步页勾选至少一个含 ASIN 的分组。');
       return;
     }
 
-    setBusy(true);
-    pushLog(`开始同步 ${runnable.length} 个分组`);
-
-    const payload = mergeEditingIntoConfig(config);
-    const saveResult = await tracker.saveConfig(payload);
-    if (!saveResult.ok) {
-      pushLog(`保存配置失败：${saveResult.error}`);
-      setBusy(false);
-      return;
-    }
-    setConfig(payload);
-
+    const payload = effectiveConfig;
+    syncInFlightRef.current = true;
+    setSyncStage('saving');
+    setSaveHint(null);
     try {
-      const result = await tracker.syncAsins({ groupIds: runnable.map((group) => group.id) });
-      if (!result.ok) {
-        pushLog(`同步结束（有失败项）：${result.error || '请查看上方日志'}`);
-      } else {
-        pushLog('全部选中分组同步完成');
-        await loadSettings();
+      try {
+        const saveResult = await tracker.saveConfig(payload);
+        if (!saveResult.ok) {
+          const message = formatSaveError(saveResult.error);
+          setSaveHint(message);
+          pushLog(message, 'issue');
+          return;
+        }
+      } catch (error) {
+        const message = formatSaveError(error);
+        setSaveHint(message);
+        pushLog(message, 'issue');
+        return;
       }
-    } catch (error) {
-      pushLog(`异常：${error instanceof Error ? error.message : String(error)}`);
+
+      setConfig(payload);
+      setSyncStage('syncing');
+      pushLog(`开始同步 ${runnable.length} 个分组`);
+
+      try {
+        const result = await tracker.syncAsins({ groupIds: runnable.map((group) => group.id) });
+        if (!result.ok) {
+          pushLog(`同步结束（有失败项）：${result.error || '请查看上方日志'}`, 'issue');
+        } else {
+          pushLog('全部选中分组同步完成');
+          await loadSettings();
+        }
+      } catch (error) {
+        pushLog(`异常：${error instanceof Error ? error.message : String(error)}`, 'issue');
+      }
     } finally {
-      setBusy(false);
+      syncInFlightRef.current = false;
+      setSyncStage('idle');
     }
   }
 
-  const headed = config ? !config.headless : false;
-  const siteLabel = MARKETPLACE_OPTIONS.find((site) => site.code === config?.marketplace)?.label ?? '美国';
-  const syncButtonLabel =
-    syncSelectedGroups.length > 0
-      ? `开始同步（${syncSelectedGroups.length} 个分组）`
-      : '开始同步';
+  const headed = effectiveConfig ? !effectiveConfig.headless : false;
+  const siteLabel = MARKETPLACE_OPTIONS.find((site) => site.code === effectiveConfig?.marketplace)?.label ?? '美国';
+  const modeLabel = headed ? '有头调试' : '无头批量';
+  const settingsLocked = syncStage !== 'idle';
   const editExcelPreview =
     paths?.dataDir && editingGroup
-      ? previewExcelPath(editName || editingGroup.name, paths.dataDir, config?.marketplace ?? 'us')
+      ? previewExcelPath(editName || editingGroup.name, paths.dataDir, effectiveConfig?.marketplace ?? 'us')
       : '';
 
   return (
     <div className="min-h-screen px-4 py-6 text-slate-100 md:px-6">
       {preloadError && (
-        <div className="mx-auto mb-4 max-w-7xl rounded-2xl border border-red-500/25 bg-red-950/70 p-4 text-sm text-red-100">
+        <div className="mx-auto mb-4 max-w-7xl rounded-3xl border border-red-400/25 bg-red-500/12 p-4 text-sm text-red-100">
           {preloadError}
         </div>
       )}
 
+      {loadError && (
+        <div className="mx-auto mb-4 flex max-w-7xl flex-col gap-3 rounded-3xl border border-red-400/25 bg-red-500/12 p-4 text-sm text-red-100 sm:flex-row sm:items-center sm:justify-between">
+          <span>{loadError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              void loadSettings();
+            }}
+            className="rounded-full border border-red-200/30 bg-red-100/10 px-4 py-2 text-xs font-medium text-red-50 hover:bg-red-100/15"
+          >
+            重试加载
+          </button>
+        </div>
+      )}
+
       <div className="mx-auto max-w-7xl">
-        <header className="mb-5 rounded-[28px] border border-white/10 bg-[rgba(7,14,28,0.82)] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur">
+        <SurfaceCard className="mb-5 overflow-hidden">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-2">
-              <span className="inline-flex w-fit items-center rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-amber-200">
+              <span className="inline-flex w-fit items-center rounded-full border border-sky-300/24 bg-sky-300/10 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-sky-100">
                 Amazon Competitor Tracker
               </span>
               <div>
@@ -296,8 +416,8 @@ export default function App() {
 
             <div className="grid gap-3 sm:grid-cols-3">
               <SummaryCard label="站点" value={siteLabel} />
-              <SummaryCard label="模式" value={headed ? '有头调试' : '无头批量'} />
-              <SummaryCard label="分组数" value={String(config?.groups.length ?? 0)} />
+              <SummaryCard label="模式" value={modeLabel} />
+              <SummaryCard label="分组数" value={String(effectiveConfig?.groups.length ?? 0)} />
             </div>
           </div>
 
@@ -308,7 +428,7 @@ export default function App() {
             {lastDone && <p>上次完成时间：{lastDone}</p>}
             <p>失败截图在 `logs/screenshots`，价格调试信息在 `logs/price-debug`。</p>
           </div>
-        </header>
+        </SurfaceCard>
 
         <nav className="mb-5 flex gap-2">
           {(
@@ -321,354 +441,88 @@ export default function App() {
               key={id}
               type="button"
               onClick={() => setTab(id)}
+              disabled={settingsLocked && id === 'settings'}
               className={`rounded-full px-4 py-2 text-sm transition ${
                 tab === id
-                  ? 'bg-amber-300 text-slate-950 shadow-[0_10px_30px_rgba(243,180,92,0.28)]'
+                  ? 'bg-sky-300 text-slate-950 shadow-[0_12px_32px_rgba(125,211,252,0.22)]'
                   : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
-              }`}
+              } disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {label}
             </button>
           ))}
         </nav>
 
-        {tab === 'settings' && config && (
+        {tab === 'settings' && effectiveConfig && (
           <section className="mb-5 grid gap-5 xl:grid-cols-[1.35fr_0.95fr]">
-            <Panel title="分组配置" description="每个分组输出一个独立 Excel。价格空值会自动重试，最终失败会保留截图和价格调试 JSON。">
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="text-xs text-slate-400">当前编辑分组</label>
-                <select
-                  value={config.activeGroupId}
-                  onChange={(e) => onSelectEditingGroup(e.target.value)}
-                  className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm"
-                >
-                  {config.groups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}（{group.asins.length} 个 ASIN）
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={onNewGroup}
-                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
-                >
-                  新建分组
-                </button>
-                <button
-                  type="button"
-                  onClick={onDeleteEditingGroup}
-                  className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200 hover:bg-red-500/15"
-                >
-                  删除当前分组
-                </button>
-              </div>
+            <GroupEditorPanel
+              groups={effectiveConfig.groups}
+              activeGroupId={effectiveConfig.activeGroupId}
+              editName={editName}
+              editAsinText={editAsinText}
+              excelPreview={editExcelPreview}
+              disabled={settingsLocked}
+              onSelectGroup={onSelectEditingGroup}
+              onEditName={onEditNameChange}
+              onEditAsinText={onEditAsinTextChange}
+              onNewGroup={onNewGroup}
+              onDeleteGroup={onDeleteEditingGroup}
+            />
 
-              <div className="mt-4">
-                <label className="text-xs text-slate-400">分组名称</label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => {
-                    setEditName(e.target.value);
-                    setSaveHint(null);
-                  }}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm outline-none transition focus:border-amber-300/40"
-                />
-              </div>
-
-              <div className="mt-4">
-                <label className="text-xs text-slate-400">本组 ASIN / Amazon 链接（每行一个）</label>
-                <textarea
-                  value={editAsinText}
-                  onChange={(e) => {
-                    setEditAsinText(e.target.value);
-                    setSaveHint(null);
-                  }}
-                  rows={10}
-                  spellCheck={false}
-                  className="mt-2 w-full resize-y rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 font-mono text-sm outline-none transition focus:border-amber-300/40"
-                />
-              </div>
-
-              {editExcelPreview && (
-                <div className="mt-4 rounded-2xl border border-amber-300/15 bg-amber-300/10 p-3 text-xs text-amber-100">
-                  今日输出预览：<span className="font-mono">{editExcelPreview}</span>
-                </div>
-              )}
-            </Panel>
-
-            <Panel title="抓取设置" description="站点、浏览器模式和美国邮编都在这里控制。">
-              <div>
-                <label className="text-xs text-slate-400">Amazon 站点</label>
-                <select
-                  value={config.marketplace}
-                  onChange={(e) => setConfig({ ...config, marketplace: e.target.value as AmazonMarketplace })}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm"
-                >
-                  {MARKETPLACE_OPTIONS.map((site) => (
-                    <option key={site.code} value={site.code}>
-                      {site.label}（{site.host}）
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <label className="mt-4 flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <input
-                  type="checkbox"
-                  checked={headed}
-                  onChange={(e) => setConfig({ ...config, headless: !e.target.checked })}
-                  className="mt-1"
-                />
-                <span>
-                  <span className="block text-sm font-medium text-slate-100">开启有头浏览器</span>
-                  <span className="mt-1 block text-xs text-slate-400">
-                    适合观察左上角邮编是否生效，以及价格区域是否正常渲染。
-                  </span>
-                </span>
-              </label>
-
-              {config.marketplace === 'us' ? (
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <Field label="美国邮编">
-                    <input
-                      type="text"
-                      maxLength={5}
-                      value={config.zipCode}
-                      onChange={(e) =>
-                        setConfig({ ...config, zipCode: e.target.value.replace(/\D/g, '').slice(0, 5) })
-                      }
-                      className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 font-mono text-sm"
-                    />
-                  </Field>
-
-                  <Field label="首页等待（秒）">
-                    <input
-                      type="number"
-                      min={0}
-                      max={120}
-                      value={config.zipHomeWaitSec ?? 10}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          zipHomeWaitSec: Math.min(120, Math.max(0, Number(e.target.value) || 0)),
-                        })
-                      }
-                      className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 font-mono text-sm"
-                    />
-                  </Field>
-
-                  <Field label="弹层等待（秒）">
-                    <input
-                      type="number"
-                      min={0}
-                      max={120}
-                      value={config.zipModalWaitSec ?? 10}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          zipModalWaitSec: Math.min(120, Math.max(0, Number(e.target.value) || 0)),
-                        })
-                      }
-                      className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 font-mono text-sm"
-                    />
-                  </Field>
-
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-400">
-                    邮编设置只对美国站点生效，其他站点会直接按对应域名访问 PDP。
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-400">
-                  当前站点为欧洲站，不执行美国邮编设置。
-                </div>
-              )}
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={onSaveConfig}
-                  className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
-                >
-                  保存设置
-                </button>
-                <button
-                  type="button"
-                  onClick={onResetDefaults}
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 hover:bg-white/10"
-                >
-                  恢复默认
-                </button>
-              </div>
-            </Panel>
+            <CrawlerSettingsPanel
+              marketplace={effectiveConfig.marketplace}
+              marketplaceOptions={MARKETPLACE_OPTIONS}
+              headed={headed}
+              zipCode={effectiveConfig.zipCode}
+              zipHomeWaitSec={effectiveConfig.zipHomeWaitSec ?? 10}
+              zipModalWaitSec={effectiveConfig.zipModalWaitSec ?? 10}
+              disabled={settingsLocked}
+              onMarketplaceChange={onMarketplaceChange}
+              onHeadedChange={onHeadedChange}
+              onZipCodeChange={onZipCodeChange}
+              onZipHomeWaitSecChange={onZipHomeWaitSecChange}
+              onZipModalWaitSecChange={onZipModalWaitSecChange}
+              onSave={onSaveConfig}
+              onResetDefaults={onResetDefaults}
+            />
           </section>
         )}
 
-        {tab === 'sync' && config && (
-          <>
-            <Panel
-              title="选择要同步的分组"
-              description="每个分组会生成一份独立 Excel。价格缺失会自动重试 3 次，仍失败会落盘截图和调试信息。"
-              className="mb-5"
-            >
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="text-sm text-slate-400">从这里控制本轮执行的分组范围。</div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="text-xs text-slate-400">站点</label>
-                  <select
-                    value={config.marketplace}
-                    disabled={busy}
-                    onChange={(e) => setConfig({ ...config, marketplace: e.target.value as AmazonMarketplace })}
-                    className="rounded-full border border-white/10 bg-slate-950/80 px-3 py-2 text-xs text-slate-200"
-                  >
-                    {MARKETPLACE_OPTIONS.map((site) => (
-                      <option key={site.code} value={site.code}>
-                        {site.label}（{site.host}）
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={selectAllWithAsins}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300 hover:bg-white/10"
-                  >
-                    全选
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearSelection}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300 hover:bg-white/10"
-                  >
-                    清空
-                  </button>
-                </div>
-              </div>
-
-              <ul className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {config.groups.map((group) => {
-                  const checked = selectedIds.has(group.id);
-                  const disabled = group.asins.length === 0;
-                  return (
-                    <li key={group.id}>
-                      <label
-                        className={`flex h-full cursor-pointer items-start gap-3 rounded-3xl border p-4 transition ${
-                          checked
-                            ? 'border-amber-300/30 bg-amber-300/10'
-                            : 'border-white/10 bg-white/5 hover:bg-white/10'
-                        } ${disabled ? 'cursor-not-allowed opacity-45' : ''}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={() => toggleSelect(group.id)}
-                          className="mt-1 h-4 w-4 shrink-0"
-                        />
-                        <span className="flex-1">
-                          <span className="block text-sm font-medium text-slate-100">{group.name}</span>
-                          <span className="mt-2 block text-xs text-slate-400">
-                            {disabled ? '当前分组暂无 ASIN' : `${group.asins.length} 个 ASIN`}
-                          </span>
-                          {!disabled && (
-                            <span className="mt-2 line-clamp-3 block text-[11px] text-slate-500">
-                              {group.asins.join(' / ')}
-                            </span>
-                          )}
-                        </span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-slate-400">
-                {headed ? '有头' : '无头'} | 站点 {siteLabel}
-                {config.marketplace === 'us'
-                  ? ` | 邮编 ${config.zipCode} | 首页等待 ${config.zipHomeWaitSec ?? 10}s | 弹层等待 ${
-                      config.zipModalWaitSec ?? 10
-                    }s`
-                  : ' | 跳过美国邮编设置'}
-                {syncSelectedGroups.length > 0 ? ` | 将运行：${syncSelectedGroups.map((group) => group.name).join('、')}` : ''}
-              </div>
-            </Panel>
-
-            <section className="mb-5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={busy || syncSelectedGroups.length === 0}
-                onClick={onSync}
-                className="rounded-full bg-amber-300 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-[0_10px_32px_rgba(243,180,92,0.28)] hover:bg-amber-200 disabled:opacity-50"
-              >
-                {busy ? '同步中...' : syncButtonLabel}
-              </button>
-              <button
-                type="button"
-                onClick={() => tracker?.openExcel()}
-                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10"
-              >
-                打开今日 Excel
-              </button>
-              <button
-                type="button"
-                onClick={() => tracker?.openDataFolder()}
-                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10"
-              >
-                打开 data 目录
-              </button>
-              <button
-                type="button"
-                onClick={() => tracker?.openLogsFolder()}
-                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10"
-              >
-                打开日志目录
-              </button>
-            </section>
-          </>
+        {tab === 'sync' && effectiveConfig && commandSummary && (
+          <CommandCenterView
+            summary={commandSummary}
+            blockReason={syncBlockReason}
+            busy={syncStage !== 'idle'}
+            runnableGroups={syncSelectedGroups}
+            groupItems={commandGroupItems}
+            activityLogs={activityLogs}
+            issueLogs={issueLogs}
+            lastDone={lastDone}
+            siteLabel={siteLabel}
+            modeLabel={modeLabel}
+            onStartSync={onSync}
+            onToggleGroup={toggleSelect}
+            onSelectAll={selectAllWithAsins}
+            onClearSelection={clearSelection}
+            onOpenExcel={() => {
+              void tracker?.openExcel();
+            }}
+            onOpenDataFolder={() => {
+              void tracker?.openDataFolder();
+            }}
+            onOpenLogsFolder={() => {
+              void tracker?.openLogsFolder();
+            }}
+          />
         )}
 
         {saveHint && (
-          <p className="mb-4 rounded-2xl border border-amber-300/15 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+          <p className="mb-4 rounded-3xl border border-sky-300/20 bg-sky-300/10 px-4 py-3 text-sm text-sky-100">
             {saveHint}
           </p>
         )}
-
-        <section className="rounded-[28px] border border-white/10 bg-[rgba(7,14,28,0.82)] shadow-[0_18px_70px_rgba(0,0,0,0.28)] backdrop-blur">
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-            <div>
-              <h2 className="text-base font-semibold text-slate-100">运行日志</h2>
-              <p className="mt-1 text-xs text-slate-500">界面保留最后 400 条日志，完整日志请查看 `logs` 目录。</p>
-            </div>
-          </div>
-          <pre className="max-h-[340px] overflow-auto whitespace-pre-wrap break-all px-5 py-4 font-mono text-xs leading-6 text-slate-300">
-            {logs.length > 0 ? logs.join('\n') : '等待同步任务开始...'}
-            <span ref={logEndRef} />
-          </pre>
-        </section>
       </div>
     </div>
-  );
-}
-
-function Panel(props: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={`rounded-[28px] border border-white/10 bg-[rgba(7,14,28,0.82)] p-5 shadow-[0_18px_70px_rgba(0,0,0,0.28)] backdrop-blur ${
-        props.className ?? ''
-      }`}
-    >
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-100">{props.title}</h2>
-        <p className="mt-1 text-sm text-slate-400">{props.description}</p>
-      </div>
-      {props.children}
-    </section>
   );
 }
 
@@ -677,15 +531,6 @@ function SummaryCard(props: { label: string; value: string }) {
     <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
       <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{props.label}</div>
       <div className="mt-1 text-sm font-medium text-slate-100">{props.value}</div>
-    </div>
-  );
-}
-
-function Field(props: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-xs text-slate-400">{props.label}</label>
-      {props.children}
     </div>
   );
 }
