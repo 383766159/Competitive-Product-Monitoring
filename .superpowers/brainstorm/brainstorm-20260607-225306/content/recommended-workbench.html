@@ -1,0 +1,443 @@
+<style>
+  .review-shell {
+    display: grid;
+    gap: 20px;
+  }
+
+  .decision-strip {
+    display: grid;
+    gap: 12px;
+  }
+
+  .decision-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(245, 158, 11, 0.24);
+    background: rgba(245, 158, 11, 0.12);
+    color: #fde68a;
+    padding: 8px 14px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+
+  .board-grid {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .board {
+    border: 1px solid #262626;
+    border-radius: 16px;
+    background: #0f0f10;
+    overflow: hidden;
+  }
+
+  .board-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid #262626;
+    background: #111214;
+  }
+
+  .board-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #f5f5f5;
+  }
+
+  .board-sub {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #737373;
+  }
+
+  .board-tag {
+    border: 1px solid #404040;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: #d4d4d4;
+    background: #171717;
+  }
+
+  .board-body {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .sync-layout {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: minmax(0, 1.6fr) 292px;
+  }
+
+  .settings-layout {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: minmax(0, 1.5fr) 320px;
+  }
+
+  .panel {
+    border: 1px solid #262626;
+    border-radius: 14px;
+    background: #121212;
+    overflow: hidden;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #262626;
+  }
+
+  .panel-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #f5f5f5;
+  }
+
+  .panel-meta {
+    font-size: 11px;
+    color: #737373;
+  }
+
+  .summary-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 14px;
+  }
+
+  .summary-cell {
+    border: 1px solid #262626;
+    border-radius: 12px;
+    background: #171717;
+    padding: 12px;
+  }
+
+  .summary-label {
+    font-size: 11px;
+    color: #737373;
+  }
+
+  .summary-value {
+    margin-top: 8px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #fafafa;
+  }
+
+  .action-stack,
+  .link-stack,
+  .log-stack,
+  .list-stack,
+  .field-stack {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .list-row,
+  .field-row,
+  .link-row {
+    border: 1px solid #262626;
+    border-radius: 12px;
+    background: #171717;
+    padding: 12px 14px;
+  }
+
+  .list-row.selected {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.35);
+  }
+
+  .list-title,
+  .field-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f5f5f5;
+  }
+
+  .list-note,
+  .field-note,
+  .link-note,
+  .log-note {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #737373;
+    line-height: 1.45;
+  }
+
+  .button-primary,
+  .button-muted,
+  .button-danger {
+    border-radius: 10px;
+    padding: 11px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .button-primary {
+    background: #f59e0b;
+    color: #111111;
+  }
+
+  .button-muted {
+    background: #1f1f1f;
+    border: 1px solid #303030;
+    color: #f3f4f6;
+  }
+
+  .button-danger {
+    background: #3a1618;
+    border: 1px solid #5a2228;
+    color: #fecaca;
+  }
+
+  .settings-fields {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field-box {
+    border: 1px solid #262626;
+    border-radius: 12px;
+    background: #171717;
+    padding: 12px;
+  }
+
+  .field-input {
+    margin-top: 8px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid #333333;
+    background: #111111;
+  }
+
+  .field-textarea {
+    margin-top: 8px;
+    min-height: 120px;
+    border-radius: 8px;
+    border: 1px solid #333333;
+    background: #111111;
+  }
+
+  .outline-note {
+    border: 1px dashed rgba(245, 158, 11, 0.38);
+    border-radius: 12px;
+    padding: 12px 14px;
+    color: #fcd34d;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  @media (max-width: 1100px) {
+    .board-grid,
+    .sync-layout,
+    .settings-layout,
+    .settings-fields {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="review-shell">
+  <div class="decision-strip">
+    <h2>推荐方向：半重构成紧凑工作台</h2>
+    <p class="subtitle">基于你刚才的选择，我不保留现在偏展示型的命令中心大卡片，而是把首页和设置页都收紧成更接近“坑位表”的桌面工具结构。</p>
+    <div class="decision-pill">推荐方案：保留现有业务流程，迁移参考项目的骨架、密度、按钮体系和信息层级</div>
+  </div>
+
+  <div class="board-grid">
+    <div class="board">
+      <div class="board-head">
+        <div>
+          <div class="board-title">首页同步面板，新骨架</div>
+          <div class="board-sub">从“主视觉 + 叙述式大卡片”切到“分组列表 + 执行摘要 + 快速入口”</div>
+        </div>
+        <div class="board-tag">更贴近坑位表</div>
+      </div>
+      <div class="board-body">
+        <div class="outline-note">顶层保留状态条和双 Tab，但主区不再把“开始同步”做成独立 Hero，而是融进右侧执行摘要，形成一眼可操作的工作台。</div>
+        <div class="sync-layout">
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-name">待同步分组</div>
+                <div class="panel-meta">主区域做成连续列表，直接承载勾选、摘要和执行状态</div>
+              </div>
+              <div class="board-tag">全选 / 清空</div>
+            </div>
+            <div class="list-stack">
+              <div class="list-row selected">
+                <div class="list-title">默认分组</div>
+                <div class="list-note">1 个 ASIN，选中后高亮，不再做厚重卡片包裹</div>
+              </div>
+              <div class="list-row">
+                <div class="list-title">美国价格观察</div>
+                <div class="list-note">3 个 ASIN，显示可执行状态与输出预览路径</div>
+              </div>
+              <div class="list-row">
+                <div class="list-title">空分组</div>
+                <div class="list-note">保留但弱化，不可执行态只在列表内表达，不额外占大块说明区</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-name">执行摘要</div>
+                <div class="panel-meta">把站点、模式、数量和主动作集中到右栏</div>
+              </div>
+            </div>
+            <div class="summary-grid">
+              <div class="summary-cell">
+                <div class="summary-label">已选分组</div>
+                <div class="summary-value">2</div>
+              </div>
+              <div class="summary-cell">
+                <div class="summary-label">待跑 ASIN</div>
+                <div class="summary-value">14</div>
+              </div>
+              <div class="summary-cell">
+                <div class="summary-label">站点</div>
+                <div class="summary-value" style="font-size:16px">美国</div>
+              </div>
+              <div class="summary-cell">
+                <div class="summary-label">模式</div>
+                <div class="summary-value" style="font-size:16px">无头</div>
+              </div>
+            </div>
+            <div class="action-stack">
+              <div class="button-primary">开始同步任务</div>
+              <div class="button-danger">停止同步</div>
+              <div class="button-muted">进入设置页</div>
+            </div>
+            <div class="link-stack">
+              <div class="link-row">
+                <div class="field-title">文件入口</div>
+                <div class="link-note">今日 Excel、data 目录、日志目录改成统一按钮组</div>
+              </div>
+              <div class="link-row">
+                <div class="field-title">异常留痕</div>
+                <div class="link-note">截图目录和价格调试目录缩成一个小面板，不再独立做气氛化提示卡</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="board">
+      <div class="board-head">
+        <div>
+          <div class="board-title">设置页编辑台，新骨架</div>
+          <div class="board-sub">从两张大面板改成“左编辑、右运行参数”的紧凑维护页</div>
+        </div>
+        <div class="board-tag">统一密度</div>
+      </div>
+      <div class="board-body">
+        <div class="outline-note">设置页保留双栏，但控件语言、标题层级、按钮尺寸和背景层级全部靠近参考项目，减少现在这种偏圆润、偏悬浮的感觉。</div>
+        <div class="settings-layout">
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-name">分组管理</div>
+                <div class="panel-meta">分组选择、新建、删除、名称、ASIN 文本区都在同一编辑轨道</div>
+              </div>
+              <div class="board-tag">新建 / 删除</div>
+            </div>
+            <div class="field-stack">
+              <div class="field-row">
+                <div class="field-title">当前分组</div>
+                <div class="field-input"></div>
+              </div>
+              <div class="field-row">
+                <div class="field-title">分组名称</div>
+                <div class="field-input"></div>
+              </div>
+              <div class="field-row">
+                <div class="field-title">ASIN / Amazon 链接</div>
+                <div class="field-textarea"></div>
+                <div class="field-note">输出预览路径压缩成底部一条弱提示，而不是高亮大块信息卡</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-name">运行参数</div>
+                <div class="panel-meta">站点、浏览器模式、美国邮编、等待秒数集中在右栏</div>
+              </div>
+            </div>
+            <div class="field-stack">
+              <div class="settings-fields">
+                <div class="field-box">
+                  <div class="field-title">Amazon 站点</div>
+                  <div class="field-input"></div>
+                </div>
+                <div class="field-box">
+                  <div class="field-title">浏览器模式</div>
+                  <div class="field-input"></div>
+                </div>
+                <div class="field-box">
+                  <div class="field-title">美国邮编</div>
+                  <div class="field-input"></div>
+                </div>
+                <div class="field-box">
+                  <div class="field-title">首页等待</div>
+                  <div class="field-input"></div>
+                </div>
+              </div>
+              <div class="button-primary">保存设置</div>
+              <div class="button-muted">恢复默认</div>
+              <div class="log-stack" style="padding:0">
+                <div class="link-row">
+                  <div class="field-title">条件切换说明</div>
+                  <div class="log-note">US 显示邮编与等待项，EU 只显示站点提示，规则不变，只调整呈现方式。</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="options">
+    <div class="option" data-choice="direction-right" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>方向对了，按这套继续细化</h3>
+        <p>说明首页和设置页都应该朝这个紧凑工作台方向推进。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="need-closer-reference" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>还要更接近参考项目</h3>
+        <p>说明要进一步减少现在项目的品牌感和氛围感，向参考项目的平面工具气质再收紧。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="keep-more-current-brand" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>保留更多当前项目气质</h3>
+        <p>说明骨架可以学参考项目，但需要留住更多现在的冷色氛围和命令中心辨识度。</p>
+      </div>
+    </div>
+  </div>
+</div>

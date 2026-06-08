@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 type SurfaceCardProps = {
   title?: string;
@@ -9,20 +9,34 @@ type SurfaceCardProps = {
 };
 
 export function SurfaceCard(props: SurfaceCardProps) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const className = ['surface-card', 'rounded-2xl', 'p-4', 'md:p-5', props.className]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <section
-      className={`surface-card rounded-[28px] p-5 ${
-        props.className ?? ''
-      }`}
+      className={className}
+      aria-labelledby={props.title ? titleId : undefined}
+      aria-describedby={props.description ? descriptionId : undefined}
     >
       {(props.title || props.description || props.headerSlot) && (
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            {props.title && <h2 className="text-lg font-semibold text-slate-100">{props.title}</h2>}
-            {props.description && <p className="mt-1 text-sm text-slate-400">{props.description}</p>}
+        <header className="mb-4 flex items-start justify-between gap-3 border-b border-[var(--line-soft)] pb-3">
+          <div className="min-w-0">
+            {props.title && (
+              <h2 id={titleId} className="text-sm font-semibold tracking-[0.02em] text-[var(--text-primary)]">
+                {props.title}
+              </h2>
+            )}
+            {props.description && (
+              <p id={descriptionId} className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+                {props.description}
+              </p>
+            )}
           </div>
           {props.headerSlot}
-        </div>
+        </header>
       )}
       {props.children}
     </section>

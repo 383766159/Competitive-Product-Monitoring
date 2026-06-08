@@ -4,25 +4,25 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
-    --bg-canvas: oklch(0.17 0.02 255);
-    --bg-elevated: oklch(0.22 0.024 252);
-    --surface-1: oklch(0.25 0.022 252 / 0.9);
-    --surface-2: oklch(0.29 0.022 252 / 0.88);
-    --surface-3: oklch(0.34 0.02 248 / 0.9);
-    --line-soft: oklch(0.56 0.02 248 / 0.24);
-    --line-strong: oklch(0.72 0.03 245 / 0.34);
-    --text-primary: oklch(0.95 0.01 255);
-    --text-secondary: oklch(0.78 0.018 248);
-    --text-muted: oklch(0.64 0.018 248);
-    --accent: oklch(0.73 0.09 236);
-    --accent-soft: oklch(0.73 0.09 236 / 0.14);
-    --success-soft: oklch(0.78 0.1 162 / 0.16);
-    --danger-soft: oklch(0.67 0.16 23 / 0.14);
-    --field-bg: oklch(0.2 0.018 255 / 0.94);
-    --field-border: oklch(0.54 0.02 248 / 0.26);
-    --focus-ring: oklch(0.78 0.08 232 / 0.34);
-    --surface-shadow: 0 22px 70px rgba(2, 6, 23, 0.34);
+    --bg-canvas: oklch(0.14 0.006 255);
+    --bg-shell: oklch(0.17 0.008 255);
+    --bg-elevated: oklch(0.19 0.009 255);
+    --surface-1: oklch(0.19 0.008 255);
+    --surface-2: oklch(0.22 0.01 255);
+    --surface-3: oklch(0.25 0.012 255);
+    --line-soft: oklch(0.34 0.008 255 / 0.52);
+    --line-strong: oklch(0.43 0.01 255 / 0.68);
+    --text-primary: oklch(0.95 0.004 255);
+    --text-secondary: oklch(0.8 0.006 255);
+    --text-muted: oklch(0.66 0.006 255);
+    --accent: oklch(0.79 0.11 84);
+    --accent-ink: oklch(0.24 0.02 84);
+    --accent-soft: oklch(0.79 0.11 84 / 0.16);
+    --success-soft: oklch(0.75 0.09 160 / 0.16);
+    --danger-soft: oklch(0.69 0.15 28 / 0.16);
+    --field-bg: oklch(0.16 0.006 255);
+    --field-border: oklch(0.36 0.01 255 / 0.9);
+    --focus-ring: oklch(0.72 0.08 220 / 0.28);
   }
 
   * {
@@ -30,10 +30,7 @@
   }
 
   html {
-    background:
-      radial-gradient(circle at top left, oklch(0.42 0.09 235 / 0.18), transparent 30%),
-      radial-gradient(circle at top right, oklch(0.44 0.05 200 / 0.12), transparent 22%),
-      linear-gradient(180deg, oklch(0.15 0.02 255) 0%, oklch(0.18 0.018 252) 100%);
+    background: var(--bg-canvas);
   }
 
   body {
@@ -41,9 +38,8 @@
     min-height: 100vh;
     color: var(--text-primary);
     background:
-      linear-gradient(180deg, oklch(0.96 0.01 255 / 0.02), transparent 18%),
-      radial-gradient(circle at 50% 0%, oklch(0.44 0.08 235 / 0.08), transparent 36%),
-      var(--bg-canvas);
+      radial-gradient(circle at top left, oklch(0.4 0.05 80 / 0.06), transparent 20%),
+      linear-gradient(180deg, var(--bg-shell), var(--bg-canvas));
     font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", sans-serif;
   }
 
@@ -51,51 +47,45 @@
     min-height: 100vh;
   }
 
-  button,
-  input,
-  textarea,
-  select {
+  #root :where(button, input, textarea, select) {
     font: inherit;
     transition:
-      background-color 160ms ease,
-      border-color 160ms ease,
-      box-shadow 160ms ease,
-      color 160ms ease;
+      background-color 140ms ease,
+      border-color 140ms ease,
+      box-shadow 140ms ease,
+      color 140ms ease;
   }
 
-  button {
+  #root :where(button) {
     border: 1px solid var(--field-border);
     color: var(--text-primary);
     background: var(--surface-2);
+    border-radius: 10px;
   }
 
-  button:hover {
+  #root :where(button:hover) {
     background: var(--surface-3);
     border-color: var(--line-strong);
   }
 
-  button:disabled {
+  #root :where(button:disabled) {
     cursor: not-allowed;
     opacity: 0.58;
   }
 
-  input,
-  textarea,
-  select {
+  #root :where(input, textarea, select) {
     color: var(--text-primary);
     background: var(--field-bg);
     border: 1px solid var(--field-border);
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   }
 
-  input::placeholder,
-  textarea::placeholder {
+  #root :where(input, textarea)::placeholder {
     color: var(--text-muted);
   }
 
-  button:focus-visible,
-  input:focus-visible,
-  textarea:focus-visible,
-  select:focus-visible {
+  #root :where(button, input, textarea, select):focus-visible {
     outline: none;
     border-color: var(--accent);
     box-shadow: 0 0 0 4px var(--focus-ring);
@@ -106,19 +96,19 @@
     color: oklch(0.98 0.01 250);
   }
 
-  ::-webkit-scrollbar {
+  textarea::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
 
-  ::-webkit-scrollbar-thumb {
+  textarea::-webkit-scrollbar-thumb {
     background: oklch(0.42 0.018 248 / 0.72);
     border: 2px solid transparent;
     border-radius: 999px;
     background-clip: content-box;
   }
 
-  ::-webkit-scrollbar-track {
+  textarea::-webkit-scrollbar-track {
     background: transparent;
   }
 }
@@ -126,10 +116,6 @@
 @layer components {
   .surface-card {
     border: 1px solid var(--line-soft);
-    background:
-      linear-gradient(180deg, oklch(0.34 0.022 245 / 0.12), transparent 26%),
-      var(--surface-1);
-    box-shadow: var(--surface-shadow);
-    backdrop-filter: blur(18px);
+    background: var(--bg-elevated);
   }
 }

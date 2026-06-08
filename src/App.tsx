@@ -10,7 +10,6 @@ import { buildCommandSummary, getSyncBlockReason, parseAsinText } from './featur
 import { CrawlerSettingsPanel } from './features/settings/components/CrawlerSettingsPanel';
 import { GroupEditorPanel } from './features/settings/components/GroupEditorPanel';
 import { previewExcelPath } from './previewExcelPath';
-import { SurfaceCard } from './shared/ui/SurfaceCard';
 
 const MARKETPLACE_OPTIONS: Array<{ code: AmazonMarketplace; label: string; host: string }> = [
   { code: 'us', label: '美国', host: 'amazon.com' },
@@ -187,6 +186,10 @@ export default function App() {
         .slice(-3)
         .reverse(),
     [activityEntries],
+  );
+  const selectedGroupCount = useMemo(
+    () => commandGroupItems.filter((item) => item.selected).length,
+    [commandGroupItems],
   );
 
   function onSelectEditingGroup(id: string) {
@@ -371,21 +374,25 @@ export default function App() {
   const siteLabel = MARKETPLACE_OPTIONS.find((site) => site.code === effectiveConfig?.marketplace)?.label ?? '美国';
   const modeLabel = headed ? '有头调试' : '无头批量';
   const settingsLocked = syncStage !== 'idle';
+  const syncTabId = 'command-center-tab-sync';
+  const settingsTabId = 'command-center-tab-settings';
+  const syncPanelId = 'command-center-panel-sync';
+  const settingsPanelId = 'command-center-panel-settings';
   const editExcelPreview =
     paths?.dataDir && editingGroup
       ? previewExcelPath(editName || editingGroup.name, paths.dataDir, effectiveConfig?.marketplace ?? 'us')
       : '';
 
   return (
-    <div className="min-h-screen px-4 py-6 text-slate-100 md:px-6">
+    <div className="min-h-screen px-4 py-5 text-slate-100 md:px-6">
       {preloadError && (
-        <div className="mx-auto mb-4 max-w-7xl rounded-3xl border border-red-400/25 bg-red-500/12 p-4 text-sm text-red-100">
+        <div className="mx-auto mb-4 max-w-7xl rounded-2xl border border-red-400/25 bg-red-500/12 p-4 text-sm text-red-100">
           {preloadError}
         </div>
       )}
 
       {loadError && (
-        <div className="mx-auto mb-4 flex max-w-7xl flex-col gap-3 rounded-3xl border border-red-400/25 bg-red-500/12 p-4 text-sm text-red-100 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto mb-4 flex max-w-7xl flex-col gap-3 rounded-2xl border border-red-400/25 bg-red-500/12 p-4 text-sm text-red-100 sm:flex-row sm:items-center sm:justify-between">
           <span>{loadError}</span>
           <button
             type="button"
@@ -400,61 +407,78 @@ export default function App() {
       )}
 
       <div className="mx-auto max-w-7xl">
-        <SurfaceCard className="mb-5 overflow-hidden">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <span className="inline-flex w-fit items-center rounded-full border border-sky-300/24 bg-sky-300/10 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-sky-100">
-                Amazon Competitor Tracker
-              </span>
+        <div className="mb-5 overflow-hidden rounded-[24px] border border-white/10 bg-[var(--bg-shell)]/95">
+          <div className="flex flex-col gap-4 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full border border-sky-300/24 bg-sky-300/10 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-sky-100">
+                  Amazon Competitor Tracker
+                </span>
+                {syncStage !== 'idle' && (
+                  <span className="inline-flex items-center rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-[11px] tracking-[0.16em] text-amber-100">
+                    任务运行中
+                  </span>
+                )}
+              </div>
               <div>
-                <h1 className="font-['Bahnschrift'] text-3xl tracking-[0.08em] text-slate-50">竞品监控工作台</h1>
+                <h1 className="font-['Bahnschrift'] text-2xl tracking-[0.06em] text-slate-50">执行工作台</h1>
                 <p className="mt-2 max-w-2xl text-sm text-slate-400">
-                  面向 Amazon PDP 的分组抓取工具，重点优化价格提取、失败重试和调试留痕。
+                  左侧排队待执行分组，右侧集中处理摘要、入口与异常，底部保留本轮运行轨迹。
                 </p>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                <p>
+                  配置文件：<span className="font-mono text-slate-300">{paths?.configPath ?? '-'}</span>
+                </p>
+                {lastDone && <p>最近完成于：{lastDone}</p>}
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <SummaryCard label="站点" value={siteLabel} />
-              <SummaryCard label="模式" value={modeLabel} />
-              <SummaryCard label="分组数" value={String(effectiveConfig?.groups.length ?? 0)} />
+            <div className="flex w-full max-w-[420px] flex-col gap-3">
+              <div className="grid gap-2 sm:grid-cols-3">
+                <SummaryCard label="当前站点" value={siteLabel} />
+                <SummaryCard label="执行模式" value={modeLabel} />
+                <SummaryCard label="已选分组" value={String(selectedGroupCount)} />
+              </div>
+
+              <nav role="tablist" aria-label="首页切页" className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ['sync', '同步面板', syncTabId, syncPanelId],
+                    ['settings', '高级设置', settingsTabId, settingsPanelId],
+                  ] as const
+                ).map(([id, label, tabId, panelId]) => (
+                  <button
+                    key={id}
+                    id={tabId}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === id}
+                    aria-controls={panelId}
+                    tabIndex={tab === id ? 0 : -1}
+                    onClick={() => setTab(id)}
+                    disabled={settingsLocked && id === 'settings'}
+                    className={`rounded-xl px-4 py-2 text-sm transition ${
+                      tab === id
+                        ? 'bg-sky-300 text-slate-950'
+                        : 'border border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.07]'
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </nav>
             </div>
           </div>
-
-          <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4 text-xs text-slate-500">
-            <p>
-              配置文件：<span className="font-mono text-slate-300">{paths?.configPath ?? '-'}</span>
-            </p>
-            {lastDone && <p>上次完成时间：{lastDone}</p>}
-            <p>失败截图在 `logs/screenshots`，价格调试信息在 `logs/price-debug`。</p>
-          </div>
-        </SurfaceCard>
-
-        <nav className="mb-5 flex gap-2">
-          {(
-            [
-              ['sync', '同步面板'],
-              ['settings', '高级设置'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              disabled={settingsLocked && id === 'settings'}
-              className={`rounded-full px-4 py-2 text-sm transition ${
-                tab === id
-                  ? 'bg-sky-300 text-slate-950 shadow-[0_12px_32px_rgba(125,211,252,0.22)]'
-                  : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
-              } disabled:cursor-not-allowed disabled:opacity-50`}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
+        </div>
 
         {tab === 'settings' && effectiveConfig && (
-          <section className="mb-5 grid gap-5 xl:grid-cols-[1.35fr_0.95fr]">
+          <section
+            id={settingsPanelId}
+            role="tabpanel"
+            aria-labelledby={settingsTabId}
+            className="mb-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1.55fr)_320px]"
+          >
             <GroupEditorPanel
               groups={effectiveConfig.groups}
               activeGroupId={effectiveConfig.activeGroupId}
@@ -489,31 +513,33 @@ export default function App() {
         )}
 
         {tab === 'sync' && effectiveConfig && commandSummary && (
-          <CommandCenterView
-            summary={commandSummary}
-            blockReason={syncBlockReason}
-            busy={syncStage !== 'idle'}
-            runnableGroups={syncSelectedGroups}
-            groupItems={commandGroupItems}
-            activityLogs={activityLogs}
-            issueLogs={issueLogs}
-            lastDone={lastDone}
-            siteLabel={siteLabel}
-            modeLabel={modeLabel}
-            onStartSync={onSync}
-            onToggleGroup={toggleSelect}
-            onSelectAll={selectAllWithAsins}
-            onClearSelection={clearSelection}
-            onOpenExcel={() => {
-              void tracker?.openExcel();
-            }}
-            onOpenDataFolder={() => {
-              void tracker?.openDataFolder();
-            }}
-            onOpenLogsFolder={() => {
-              void tracker?.openLogsFolder();
-            }}
-          />
+          <section id={syncPanelId} role="tabpanel" aria-labelledby={syncTabId}>
+            <CommandCenterView
+              summary={commandSummary}
+              blockReason={syncBlockReason}
+              busy={syncStage !== 'idle'}
+              runnableGroups={syncSelectedGroups}
+              groupItems={commandGroupItems}
+              activityLogs={activityLogs}
+              issueLogs={issueLogs}
+              lastDone={lastDone}
+              siteLabel={siteLabel}
+              modeLabel={modeLabel}
+              onStartSync={onSync}
+              onToggleGroup={toggleSelect}
+              onSelectAll={selectAllWithAsins}
+              onClearSelection={clearSelection}
+              onOpenExcel={() => {
+                void tracker?.openExcel();
+              }}
+              onOpenDataFolder={() => {
+                void tracker?.openDataFolder();
+              }}
+              onOpenLogsFolder={() => {
+                void tracker?.openLogsFolder();
+              }}
+            />
+          </section>
         )}
 
         {saveHint && (
@@ -528,8 +554,8 @@ export default function App() {
 
 function SummaryCard(props: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{props.label}</div>
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+      <div className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{props.label}</div>
       <div className="mt-1 text-sm font-medium text-slate-100">{props.value}</div>
     </div>
   );

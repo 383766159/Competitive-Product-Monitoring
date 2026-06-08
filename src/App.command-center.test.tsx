@@ -25,6 +25,10 @@ function mountWithoutTracker() {
   return render(<App />);
 }
 
+function getHomeTab(name: '同步面板' | '高级设置') {
+  return screen.getByRole('tab', { name });
+}
+
 beforeAll(() => {
   HTMLElement.prototype.scrollIntoView = vi.fn();
 });
@@ -46,15 +50,36 @@ describe('App command center home', () => {
     ).toBeInTheDocument();
   });
 
-  it('渲染唯一主动作和命令中心关键区域', async () => {
+  it('首页改为工作台布局，右栏承接摘要与入口，底部展示运行轨迹', async () => {
     mountApp();
 
-    const primaryActions = await screen.findAllByRole('button', { name: '开始同步任务' });
-    expect(primaryActions).toHaveLength(1);
+    expect(await screen.findByRole('heading', { level: 1, name: '执行工作台' })).toBeInTheDocument();
 
-    expect(screen.getByRole('heading', { name: '待执行分组' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '运行轨迹' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '快速入口' })).toBeInTheDocument();
+    const summaryRegion = screen.getByRole('region', { name: '执行摘要' });
+    const groupsRegion = screen.getByRole('region', { name: '待执行分组' });
+    const filesRegion = screen.getByRole('region', { name: '文件入口' });
+    const issueRegion = screen.getByRole('region', { name: '异常留痕' });
+    const activityRegion = screen.getByRole('region', { name: '运行轨迹' });
+
+    expect(within(summaryRegion).getByRole('button', { name: '开始同步任务' })).toBeInTheDocument();
+    expect(within(groupsRegion).getByRole('button', { name: '全选' })).toBeInTheDocument();
+    expect(within(filesRegion).getByRole('button', { name: '打开今日 Excel' })).toBeInTheDocument();
+    expect(within(issueRegion).getByText(/logs\/screenshots/)).toBeInTheDocument();
+    expect(within(activityRegion).getByText(/等待同步任务|任务排队中|错误:/)).toBeInTheDocument();
+  });
+
+  it('顶部切页入口提供 tab 语义并与面板关联', async () => {
+    mountApp();
+
+    const tablist = await screen.findByRole('tablist');
+    const syncTab = within(tablist).getByRole('tab', { name: '同步面板' });
+    const settingsTab = within(tablist).getByRole('tab', { name: '高级设置' });
+
+    expect(syncTab).toHaveAttribute('aria-selected', 'true');
+    expect(settingsTab).toHaveAttribute('aria-selected', 'false');
+    expect(syncTab).toHaveAttribute('aria-controls');
+    expect(settingsTab).toHaveAttribute('aria-controls');
+    expect(screen.getByRole('tabpanel', { name: '同步面板' })).toBeInTheDocument();
   });
 
   it('点击首页主 CTA 会调用 tracker.syncAsins', async () => {
@@ -154,14 +179,14 @@ describe('App command center home', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: '开始同步任务' }));
 
-    const settingsTab = screen.getByRole('button', { name: '高级设置' });
+    const settingsTab = getHomeTab('高级设置');
     await waitFor(() => {
       expect(settingsTab).toBeDisabled();
     });
     await user.click(settingsTab);
 
-    expect(screen.queryByRole('heading', { name: '分组编辑' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '待执行分组' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '分组管理' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '待执行分组' })).toBeInTheDocument();
 
     resolveSave?.({ ok: true });
   });
@@ -233,17 +258,14 @@ describe('App command center home', () => {
     );
 
     await screen.findByText('任务排队中');
-    const activityCard = screen.getByRole('heading', { name: '运行轨迹' }).closest('section');
-    const issueCard = screen.getByRole('heading', { name: '异常留痕' }).closest('section');
+    const activityCard = screen.getByRole('region', { name: '运行轨迹' });
+    const issueCard = screen.getByRole('region', { name: '异常留痕' });
 
-    expect(activityCard).not.toBeNull();
-    expect(issueCard).not.toBeNull();
-
-    expect(within(activityCard as HTMLElement).getByText('最近完成：2026-06-06 10:30:00')).toBeInTheDocument();
-    expect(within(activityCard as HTMLElement).getByText('错误: network timeout')).toBeInTheDocument();
+    expect(within(activityCard).getByText(/2026-06-06 10:30:00/)).toBeInTheDocument();
+    expect(within(activityCard).getByText('错误: network timeout')).toBeInTheDocument();
     expect(screen.getAllByText('失败截图路径已归档')).toHaveLength(1);
-    expect(within(issueCard as HTMLElement).getByText('错误: network timeout')).toBeInTheDocument();
-    expect(within(issueCard as HTMLElement).queryByText('失败截图路径已归档')).not.toBeInTheDocument();
+    expect(within(issueCard).getByText('错误: network timeout')).toBeInTheDocument();
+    expect(within(issueCard).queryByText('失败截图路径已归档')).not.toBeInTheDocument();
   });
 
   it('没有可执行分组时禁用主按钮并显示阻断信息', async () => {
@@ -274,23 +296,23 @@ describe('App command center home', () => {
     mountApp();
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: '高级设置' }));
+    await user.click(await screen.findByRole('tab', { name: '高级设置' }));
 
-    expect(screen.getByRole('heading', { name: '分组编辑' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '抓取设置' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '保存设置' })).toBeInTheDocument();
+    const settingsPanel = screen.getByRole('tabpanel', { name: '高级设置' });
+    const groupPanel = within(settingsPanel).getByRole('region', { name: '分组管理' });
+    const crawlerPanel = within(settingsPanel).getByRole('region', { name: '运行参数' });
 
-    const crawlerPanel = screen.getByRole('heading', { name: '抓取设置' }).closest('section');
-    expect(crawlerPanel).not.toBeNull();
+    expect(within(groupPanel).getByRole('button', { name: /默认分组/ })).toBeInTheDocument();
+    expect(within(groupPanel).getByRole('textbox', { name: '分组名称' })).toBeInTheDocument();
+    expect(within(crawlerPanel).getByRole('button', { name: '保存设置' })).toBeInTheDocument();
+    expect(within(crawlerPanel).getByText('美国邮编')).toBeInTheDocument();
 
-    expect(within(crawlerPanel as HTMLElement).getByText('美国邮编')).toBeInTheDocument();
-
-    await user.selectOptions(within(crawlerPanel as HTMLElement).getByRole('combobox'), 'de');
+    await user.selectOptions(within(crawlerPanel).getByRole('combobox', { name: 'Amazon 站点' }), 'de');
 
     await waitFor(() => {
-      expect(within(crawlerPanel as HTMLElement).queryByText('美国邮编')).not.toBeInTheDocument();
+      expect(within(crawlerPanel).queryByText('美国邮编')).not.toBeInTheDocument();
     });
-    expect(within(crawlerPanel as HTMLElement).getByText('当前站点为欧洲站，不执行美国邮编设置。')).toBeInTheDocument();
+    expect(within(crawlerPanel).getByText('当前站点为欧洲站，不执行美国邮编设置。')).toBeInTheDocument();
   });
 
   it('设置页保存配置失败时显示明确反馈', async () => {
@@ -298,7 +320,7 @@ describe('App command center home', () => {
     mountApp(createTrackerStub({ saveConfig }));
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: '高级设置' }));
+    await user.click(await screen.findByRole('tab', { name: '高级设置' }));
     await user.click(screen.getByRole('button', { name: '保存设置' }));
 
     expect(await screen.findByText('保存配置失败：磁盘不可写')).toBeInTheDocument();
@@ -311,7 +333,7 @@ describe('App command center home', () => {
     mountApp(createTrackerStub({ saveConfig }));
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: '高级设置' }));
+    await user.click(await screen.findByRole('tab', { name: '高级设置' }));
     await user.click(screen.getByRole('button', { name: '保存设置' }));
 
     expect(await screen.findByText('保存配置失败：磁盘写入中断')).toBeInTheDocument();
@@ -335,7 +357,7 @@ describe('App command center home', () => {
       />,
     );
 
-    expect(screen.getByLabelText('当前编辑分组')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /默认分组/ })).toBeDisabled();
     expect(screen.getByLabelText('分组名称')).toBeDisabled();
     expect(screen.getByLabelText('本组 ASIN / Amazon 链接（每行一个）')).toBeDisabled();
     expect(screen.getByRole('button', { name: '新建分组' })).toBeDisabled();
@@ -373,11 +395,11 @@ describe('App command center home', () => {
     mountApp();
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: '高级设置' }));
+    await user.click(await screen.findByRole('tab', { name: '高级设置' }));
 
     const asinField = screen.getByLabelText('本组 ASIN / Amazon 链接（每行一个）');
     await user.clear(asinField);
-    await user.click(screen.getByRole('button', { name: '同步面板' }));
+    await user.click(screen.getByRole('tab', { name: '同步面板' }));
 
     const primaryAction = await screen.findByRole('button', { name: '开始同步任务' });
     await waitFor(() => {
@@ -392,12 +414,12 @@ describe('App command center home', () => {
     mountApp(createTrackerStub({ syncAsins, saveConfig: saveConfig as Window['tracker']['saveConfig'] }));
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: '高级设置' }));
+    await user.click(await screen.findByRole('tab', { name: '高级设置' }));
 
     const asinField = screen.getByLabelText('本组 ASIN / Amazon 链接（每行一个）');
     await user.clear(asinField);
     await user.type(asinField, 'B0BBBBBB02');
-    await user.click(screen.getByRole('button', { name: '同步面板' }));
+    await user.click(screen.getByRole('tab', { name: '同步面板' }));
 
     const primaryAction = await screen.findByRole('button', { name: '开始同步任务' });
     await waitFor(() => {
@@ -460,7 +482,7 @@ describe('App command center home', () => {
     const user = userEvent.setup();
     await user.click(retryButton);
 
-    await screen.findByRole('heading', { name: '待执行分组' });
+    await screen.findByRole('region', { name: '待执行分组' });
     expect(screen.queryByText('加载配置失败：配置读取失败')).not.toBeInTheDocument();
   });
 
@@ -471,7 +493,7 @@ describe('App command center home', () => {
     mountApp(createTrackerStub({ getDefaultConfig }));
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: '高级设置' }));
+    await user.click(await screen.findByRole('tab', { name: '高级设置' }));
     await user.click(screen.getByRole('button', { name: '恢复默认' }));
 
     expect(await screen.findByText('恢复默认配置失败：默认配置读取失败')).toBeInTheDocument();

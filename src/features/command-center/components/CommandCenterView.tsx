@@ -30,34 +30,41 @@ type CommandCenterViewProps = {
 
 export function CommandCenterView(props: CommandCenterViewProps) {
   return (
-    <section className="grid gap-5 xl:grid-cols-[1.45fr_0.95fr]">
-      <div className="space-y-5">
-        <CommandHero
-          title={props.summary.title}
-          detail={props.summary.detail}
-          actionLabel={props.summary.actionLabel}
+    <section className="space-y-5">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.95fr)]">
+        <ExecutionRail
+          mode="list"
+          groupItems={props.groupItems}
           busy={props.busy}
-          blockReason={props.blockReason}
-          runnableCount={props.runnableGroups.length}
-          siteLabel={props.siteLabel}
-          modeLabel={props.modeLabel}
-          lastDone={props.lastDone}
-          onStartSync={props.onStartSync}
+          onToggleGroup={props.onToggleGroup}
+          onSelectAll={props.onSelectAll}
+          onClearSelection={props.onClearSelection}
         />
-        <ActivityFeed logs={props.activityLogs} lastDone={props.lastDone} />
+
+        <div className="space-y-5">
+          <CommandHero
+            title={props.summary.title}
+            detail={props.summary.detail}
+            actionLabel={props.summary.actionLabel}
+            busy={props.busy}
+            blockReason={props.blockReason}
+            runnableCount={props.runnableGroups.length}
+            siteLabel={props.siteLabel}
+            modeLabel={props.modeLabel}
+            lastDone={props.lastDone}
+            onStartSync={props.onStartSync}
+          />
+          <ExecutionRail
+            mode="summary"
+            onOpenExcel={props.onOpenExcel}
+            onOpenDataFolder={props.onOpenDataFolder}
+            onOpenLogsFolder={props.onOpenLogsFolder}
+            issueLogs={props.issueLogs}
+          />
+        </div>
       </div>
 
-      <ExecutionRail
-        groupItems={props.groupItems}
-        busy={props.busy}
-        onToggleGroup={props.onToggleGroup}
-        onSelectAll={props.onSelectAll}
-        onClearSelection={props.onClearSelection}
-        onOpenExcel={props.onOpenExcel}
-        onOpenDataFolder={props.onOpenDataFolder}
-        onOpenLogsFolder={props.onOpenLogsFolder}
-        issueLogs={props.issueLogs}
-      />
+      <ActivityFeed logs={props.activityLogs} lastDone={props.lastDone} />
     </section>
   );
 }
