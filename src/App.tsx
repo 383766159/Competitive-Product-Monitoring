@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CommandCenterView } from './features/command-center/components/CommandCenterView';
-import type { AmazonMarketplace, AsinGroup, UserConfig } from './features/command-center/model';
+import type {
+  AmazonMarketplace,
+  AsinGroup,
+  MarketplaceZipSettings,
+  UserConfig,
+  ZipSettingsByMarketplace,
+} from './features/command-center/model';
 import {
   getCommandGroupItems,
   getRunnableGroups,
@@ -18,6 +24,48 @@ const MARKETPLACE_OPTIONS: Array<{ code: AmazonMarketplace; label: string; host:
   { code: 'it', label: '意大利', host: 'amazon.it' },
   { code: 'es', label: '西班牙', host: 'amazon.es' },
 ];
+
+const DEFAULT_MARKETPLACE_ZIP_SETTINGS: MarketplaceZipSettings = {
+  zipCode: '10001',
+  zipHomeWaitSec: 10,
+  zipModalWaitSec: 10,
+};
+
+function createDefaultZipSettings(): ZipSettingsByMarketplace {
+  return {
+    us: { ...DEFAULT_MARKETPLACE_ZIP_SETTINGS },
+    de: { ...DEFAULT_MARKETPLACE_ZIP_SETTINGS },
+    fr: { ...DEFAULT_MARKETPLACE_ZIP_SETTINGS },
+    it: { ...DEFAULT_MARKETPLACE_ZIP_SETTINGS },
+    es: { ...DEFAULT_MARKETPLACE_ZIP_SETTINGS },
+  };
+}
+
+function getMarketplaceZipSettings(
+  config: Pick<UserConfig, 'zipSettings'> | null | undefined,
+  marketplace: AmazonMarketplace,
+): MarketplaceZipSettings {
+  return config?.zipSettings?.[marketplace] ?? DEFAULT_MARKETPLACE_ZIP_SETTINGS;
+}
+
+function updateMarketplaceZipSettings(
+  config: UserConfig,
+  marketplace: AmazonMarketplace,
+  patch: Partial<MarketplaceZipSettings>,
+): UserConfig {
+  const current = getMarketplaceZipSettings(config, marketplace);
+  return {
+    ...config,
+    zipSettings: {
+      ...createDefaultZipSettings(),
+      ...config.zipSettings,
+      [marketplace]: {
+        ...current,
+        ...patch,
+      },
+    },
+  };
+}
 
 type ActivityLogEntry = {
   message: string;
@@ -299,25 +347,31 @@ export default function App() {
 
   function onZipCodeChange(value: string) {
     if (!config) return;
-    setConfig({ ...config, zipCode: value.replace(/\D/g, '').slice(0, 5) });
+    setConfig(
+      updateMarketplaceZipSettings(config, config.marketplace, {
+        zipCode: value.replace(/\D/g, '').slice(0, 5),
+      }),
+    );
     setSaveHint(null);
   }
 
   function onZipHomeWaitSecChange(value: number) {
     if (!config) return;
-    setConfig({
-      ...config,
-      zipHomeWaitSec: Math.min(120, Math.max(0, Number.isFinite(value) ? value : 0)),
-    });
+    setConfig(
+      updateMarketplaceZipSettings(config, config.marketplace, {
+        zipHomeWaitSec: Math.min(120, Math.max(0, Number.isFinite(value) ? value : 0)),
+      }),
+    );
     setSaveHint(null);
   }
 
   function onZipModalWaitSecChange(value: number) {
     if (!config) return;
-    setConfig({
-      ...config,
-      zipModalWaitSec: Math.min(120, Math.max(0, Number.isFinite(value) ? value : 0)),
-    });
+    setConfig(
+      updateMarketplaceZipSettings(config, config.marketplace, {
+        zipModalWaitSec: Math.min(120, Math.max(0, Number.isFinite(value) ? value : 0)),
+      }),
+    );
     setSaveHint(null);
   }
 
@@ -372,6 +426,7 @@ export default function App() {
 
   const headed = effectiveConfig ? !effectiveConfig.headless : false;
   const siteLabel = MARKETPLACE_OPTIONS.find((site) => site.code === effectiveConfig?.marketplace)?.label ?? '美国';
+  const currentZipSettings = getMarketplaceZipSettings(effectiveConfig, effectiveConfig?.marketplace ?? 'us');
   const modeLabel = headed ? '有头调试' : '无头批量';
   const settingsLocked = syncStage !== 'idle';
   const syncTabId = 'command-center-tab-sync';
@@ -497,9 +552,9 @@ export default function App() {
               marketplace={effectiveConfig.marketplace}
               marketplaceOptions={MARKETPLACE_OPTIONS}
               headed={headed}
-              zipCode={effectiveConfig.zipCode}
-              zipHomeWaitSec={effectiveConfig.zipHomeWaitSec ?? 10}
-              zipModalWaitSec={effectiveConfig.zipModalWaitSec ?? 10}
+              zipCode={currentZipSettings.zipCode}
+              zipHomeWaitSec={currentZipSettings.zipHomeWaitSec}
+              zipModalWaitSec={currentZipSettings.zipModalWaitSec}
               disabled={settingsLocked}
               onMarketplaceChange={onMarketplaceChange}
               onHeadedChange={onHeadedChange}

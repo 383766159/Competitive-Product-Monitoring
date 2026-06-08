@@ -6,12 +6,18 @@ export type AsinGroup = {
 
 export type AmazonMarketplace = 'us' | 'de' | 'fr' | 'it' | 'es';
 
-export type UserConfig = {
-  headless: boolean;
-  marketplace: AmazonMarketplace;
+export type MarketplaceZipSettings = {
   zipCode: string;
   zipHomeWaitSec: number;
   zipModalWaitSec: number;
+};
+
+export type ZipSettingsByMarketplace = Record<AmazonMarketplace, MarketplaceZipSettings>;
+
+export type UserConfig = {
+  headless: boolean;
+  marketplace: AmazonMarketplace;
+  zipSettings: ZipSettingsByMarketplace;
   locale: 'en-US';
   activeGroupId: string;
   groups: AsinGroup[];

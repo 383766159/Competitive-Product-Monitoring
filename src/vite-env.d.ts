@@ -21,12 +21,16 @@ type AsinGroupPayload = {
   asins: string[];
 };
 
-type UserConfigPayload = {
-  headless: boolean;
-  marketplace: 'us' | 'de' | 'fr' | 'it' | 'es';
+type MarketplaceZipSettingsPayload = {
   zipCode: string;
   zipHomeWaitSec: number;
   zipModalWaitSec: number;
+};
+
+type UserConfigPayload = {
+  headless: boolean;
+  marketplace: 'us' | 'de' | 'fr' | 'it' | 'es';
+  zipSettings: Record<'us' | 'de' | 'fr' | 'it' | 'es', MarketplaceZipSettingsPayload>;
   locale: 'en-US';
   activeGroupId: string;
   groups: AsinGroupPayload[];

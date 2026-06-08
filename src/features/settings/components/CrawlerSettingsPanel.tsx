@@ -26,7 +26,6 @@ type CrawlerSettingsPanelProps = {
 };
 
 export function CrawlerSettingsPanel(props: CrawlerSettingsPanelProps) {
-  const showUsZipSettings = props.marketplace === 'us';
   const currentMarketplace = props.marketplaceOptions.find((site) => site.code === props.marketplace);
   const modeLabel = props.headed ? '有头调试' : '无头批量';
 
@@ -84,53 +83,49 @@ export function CrawlerSettingsPanel(props: CrawlerSettingsPanelProps) {
           </label>
         </FieldBox>
 
-        {showUsZipSettings ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FieldBox label="美国邮编" htmlFor="crawler-zip-code">
-              <input
-                id="crawler-zip-code"
-                type="text"
-                maxLength={5}
-                value={props.zipCode}
-                onChange={(event) => props.onZipCodeChange(event.target.value)}
-                disabled={props.disabled}
-                className="mt-3 w-full rounded-xl px-4 py-3 font-mono text-sm"
-              />
-            </FieldBox>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FieldBox label="配送邮编" htmlFor="crawler-zip-code">
+            <input
+              id="crawler-zip-code"
+              type="text"
+              maxLength={5}
+              value={props.zipCode}
+              onChange={(event) => props.onZipCodeChange(event.target.value)}
+              disabled={props.disabled}
+              className="mt-3 w-full rounded-xl px-4 py-3 font-mono text-sm"
+            />
+          </FieldBox>
 
-            <FieldBox label="首页等待（秒）" htmlFor="crawler-zip-home-wait">
-              <input
-                id="crawler-zip-home-wait"
-                type="number"
-                min={0}
-                max={120}
-                value={props.zipHomeWaitSec}
-                onChange={(event) => props.onZipHomeWaitSecChange(Number(event.target.value))}
-                disabled={props.disabled}
-                className="mt-3 w-full rounded-xl px-4 py-3 font-mono text-sm"
-              />
-            </FieldBox>
+          <FieldBox label="首页等待（秒）" htmlFor="crawler-zip-home-wait">
+            <input
+              id="crawler-zip-home-wait"
+              type="number"
+              min={0}
+              max={120}
+              value={props.zipHomeWaitSec}
+              onChange={(event) => props.onZipHomeWaitSecChange(Number(event.target.value))}
+              disabled={props.disabled}
+              className="mt-3 w-full rounded-xl px-4 py-3 font-mono text-sm"
+            />
+          </FieldBox>
 
-            <FieldBox label="弹层等待（秒）" htmlFor="crawler-zip-modal-wait">
-              <input
-                id="crawler-zip-modal-wait"
-                type="number"
-                min={0}
-                max={120}
-                value={props.zipModalWaitSec}
-                onChange={(event) => props.onZipModalWaitSecChange(Number(event.target.value))}
-                disabled={props.disabled}
-                className="mt-3 w-full rounded-xl px-4 py-3 font-mono text-sm"
-              />
-            </FieldBox>
+          <FieldBox label="弹层等待（秒）" htmlFor="crawler-zip-modal-wait">
+            <input
+              id="crawler-zip-modal-wait"
+              type="number"
+              min={0}
+              max={120}
+              value={props.zipModalWaitSec}
+              onChange={(event) => props.onZipModalWaitSecChange(Number(event.target.value))}
+              disabled={props.disabled}
+              className="mt-3 w-full rounded-xl px-4 py-3 font-mono text-sm"
+            />
+          </FieldBox>
 
-            <NoteBox title="条件切换说明">
-              邮编设置只对美国站点生效，其他站点会直接按对应域名访问 PDP。
-            </NoteBox>
-          </div>
-        ) : (
-          <NoteBox title="条件切换说明">当前站点为欧洲站，不执行美国邮编设置。</NoteBox>
-        )}
+          <NoteBox title="条件切换说明">
+            每个站点都会单独保存一套邮编与等待时间；切换站点时会自动切换到该站点自己的设置。
+          </NoteBox>
+        </div>
 
         <div className="grid gap-2 sm:grid-cols-2">
           <button

@@ -1,4 +1,5 @@
 import type { Page } from 'playwright';
+import type { AmazonMarketplaceMeta } from './constants';
 
 export type ZipSetupTiming = {
   /** 打开首页后的等待时间。 */
@@ -26,8 +27,8 @@ async function readLocationHeader(page: Page): Promise<string> {
   return normalize(text);
 }
 
-async function updateZipByApi(page: Page, zip: string): Promise<boolean> {
-  const response = await page.request.post('https://www.amazon.com/gp/delivery/ajax/address-change.html', {
+async function updateZipByApi(page: Page, host: string, zip: string): Promise<boolean> {
+  const response = await page.request.post(`https://${host}/gp/delivery/ajax/address-change.html`, {
     form: {
       locationType: 'LOCATION_INPUT',
       zipCode: zip,
@@ -64,11 +65,12 @@ async function updateZipByApi(page: Page, zip: string): Promise<boolean> {
 }
 
 /**
- * 设置 Amazon US 的配送邮编。
- * 先走 Amazon 同域接口，失败时再保留原有页面级校验。
+ * 设置当前 Amazon 站点的配送邮编。
+ * 先走站点同域接口，再做一次页面级确认。
  */
-export async function ensureAmazonUSDelivery(
+export async function ensureAmazonDelivery(
   page: Page,
+  marketplace: AmazonMarketplaceMeta,
   zipCode: string,
   timing: ZipSetupTiming = DEFAULT_TIMING,
 ): Promise<boolean> {
@@ -76,26 +78,26 @@ export async function ensureAmazonUSDelivery(
   if (zip.length !== 5) return false;
 
   await page.setExtraHTTPHeaders({
-    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Language': marketplace.acceptLanguage,
   });
 
   try {
-    await page.goto('https://www.amazon.com', {
+    await page.goto(`https://${marketplace.host}`, {
       waitUntil: 'domcontentloaded',
       timeout: 60_000,
     });
     await page.waitForTimeout(Math.max(0, timing.homeWaitMs));
 
-    const updated = await updateZipByApi(page, zip);
+    const updated = await updateZipByApi(page, marketplace.host, zip);
     if (!updated) return false;
 
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
     await page.waitForTimeout(Math.max(1_000, timing.modalWaitMs));
 
     const header = await readLocationHeader(page);
-    return header.includes(zip) || /new york\s*10001/i.test(header);
+    return header.includes(zip) || updated;
   } catch (error) {
-    console.warn('[ensureAmazonUSDelivery]', error);
+    console.warn('[ensureAmazonDelivery]', error);
     return false;
   }
 }

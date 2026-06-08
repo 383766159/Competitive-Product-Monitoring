@@ -274,9 +274,13 @@ describe('App command center home', () => {
         getConfig: async () => ({
           headless: true,
           marketplace: 'us',
-          zipCode: '10001',
-          zipHomeWaitSec: 10,
-          zipModalWaitSec: 10,
+          zipSettings: {
+            us: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+            de: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+            fr: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+            it: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+            es: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+          },
           locale: 'en-US',
           activeGroupId: 'empty-group',
           groups: [{ id: 'empty-group', name: '空分组', asins: [] }],
@@ -292,7 +296,7 @@ describe('App command center home', () => {
     expect(screen.getByText('当前没有可执行分组')).toBeInTheDocument();
   });
 
-  it('高级设置页按站点切换显示条件字段，并提供保存入口', async () => {
+  it('高级设置页为每个站点独立维护邮编与等待参数', async () => {
     mountApp();
 
     const user = userEvent.setup();
@@ -305,14 +309,52 @@ describe('App command center home', () => {
     expect(within(groupPanel).getByRole('button', { name: /默认分组/ })).toBeInTheDocument();
     expect(within(groupPanel).getByRole('textbox', { name: '分组名称' })).toBeInTheDocument();
     expect(within(crawlerPanel).getByRole('button', { name: '保存设置' })).toBeInTheDocument();
-    expect(within(crawlerPanel).getByText('美国邮编')).toBeInTheDocument();
+    expect(within(crawlerPanel).getByLabelText('配送邮编')).toHaveValue('10001');
 
     await user.selectOptions(within(crawlerPanel).getByRole('combobox', { name: 'Amazon 站点' }), 'de');
+    const deZipInput = within(crawlerPanel).getByLabelText('配送邮编');
+    await user.clear(deZipInput);
+    await user.type(deZipInput, '10115');
+
+    await user.selectOptions(within(crawlerPanel).getByRole('combobox', { name: 'Amazon 站点' }), 'us');
+    expect(within(crawlerPanel).getByLabelText('配送邮编')).toHaveValue('10001');
+
+    await user.selectOptions(within(crawlerPanel).getByRole('combobox', { name: 'Amazon 站点' }), 'de');
+    expect(within(crawlerPanel).getByLabelText('配送邮编')).toHaveValue('10115');
+  });
+
+  it('设置页保存时会保留各站点独立邮编配置', async () => {
+    const saveConfig = vi.fn(async () => ({ ok: true as const }));
+    mountApp(createTrackerStub({ saveConfig }));
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('tab', { name: '高级设置' }));
+
+    const crawlerPanel = within(screen.getByRole('tabpanel', { name: '高级设置' })).getByRole('region', {
+      name: '运行参数',
+    });
+
+    const usZipInput = within(crawlerPanel).getByLabelText('配送邮编');
+    await user.clear(usZipInput);
+    await user.type(usZipInput, '10001');
+
+    await user.selectOptions(within(crawlerPanel).getByRole('combobox', { name: 'Amazon 站点' }), 'de');
+    const deZipInput = within(crawlerPanel).getByLabelText('配送邮编');
+    await user.clear(deZipInput);
+    await user.type(deZipInput, '10115');
+
+    await user.click(screen.getByRole('button', { name: '保存设置' }));
 
     await waitFor(() => {
-      expect(within(crawlerPanel).queryByText('美国邮编')).not.toBeInTheDocument();
+      expect(saveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          zipSettings: expect.objectContaining({
+            us: expect.objectContaining({ zipCode: '10001' }),
+            de: expect.objectContaining({ zipCode: '10115' }),
+          }),
+        }),
+      );
     });
-    expect(within(crawlerPanel).getByText('当前站点为欧洲站，不执行美国邮编设置。')).toBeInTheDocument();
   });
 
   it('设置页保存配置失败时显示明确反馈', async () => {
@@ -384,7 +426,7 @@ describe('App command center home', () => {
 
     expect(screen.getByLabelText('Amazon 站点')).toBeDisabled();
     expect(screen.getByRole('checkbox')).toBeDisabled();
-    expect(screen.getByLabelText('美国邮编')).toBeDisabled();
+    expect(screen.getByLabelText('配送邮编')).toBeDisabled();
     expect(screen.getByLabelText('首页等待（秒）')).toBeDisabled();
     expect(screen.getByLabelText('弹层等待（秒）')).toBeDisabled();
     expect(screen.getByRole('button', { name: '保存设置' })).toBeDisabled();
@@ -465,9 +507,13 @@ describe('App command center home', () => {
       .mockResolvedValue({
         headless: true,
         marketplace: 'us',
-        zipCode: '10001',
-        zipHomeWaitSec: 10,
-        zipModalWaitSec: 10,
+        zipSettings: {
+          us: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+          de: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+          fr: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+          it: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+          es: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+        },
         locale: 'en-US',
         activeGroupId: 'group-1',
         groups: [{ id: 'group-1', name: '默认分组', asins: ['B0AAAAAA01'] }],

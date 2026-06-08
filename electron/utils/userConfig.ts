@@ -18,9 +18,14 @@ export interface AsinGroup {
 export interface UserConfig {
   headless: boolean;
   marketplace: AmazonMarketplace;
-  zipCode: string;
-  zipHomeWaitSec: number;
-  zipModalWaitSec: number;
+  zipSettings: Record<
+    AmazonMarketplace,
+    {
+      zipCode: string;
+      zipHomeWaitSec: number;
+      zipModalWaitSec: number;
+    }
+  >;
   locale: 'en-US';
   activeGroupId: string;
   groups: AsinGroup[];
@@ -32,6 +37,53 @@ export const DEFAULT_ZIP_HOME_WAIT_SEC = 10;
 export const DEFAULT_ZIP_MODAL_WAIT_SEC = 10;
 const ZIP_WAIT_SEC_MIN = 0;
 const ZIP_WAIT_SEC_MAX = 120;
+const MARKETPLACES: AmazonMarketplace[] = ['us', 'de', 'fr', 'it', 'es'];
+
+function createDefaultMarketplaceZipSettings() {
+  return {
+    zipCode: DEFAULT_ZIP_CODE,
+    zipHomeWaitSec: DEFAULT_ZIP_HOME_WAIT_SEC,
+    zipModalWaitSec: DEFAULT_ZIP_MODAL_WAIT_SEC,
+  };
+}
+
+function createDefaultZipSettings(): UserConfig['zipSettings'] {
+  return {
+    us: createDefaultMarketplaceZipSettings(),
+    de: createDefaultMarketplaceZipSettings(),
+    fr: createDefaultMarketplaceZipSettings(),
+    it: createDefaultMarketplaceZipSettings(),
+    es: createDefaultMarketplaceZipSettings(),
+  };
+}
+
+function normalizeZipCode(value: unknown, fallback: string): string {
+  return /^\d{5}$/.test(String(value ?? '').trim()) ? String(value).trim() : fallback;
+}
+
+function normalizeZipSettings(
+  raw: unknown,
+  fallback: UserConfig['zipSettings'],
+): UserConfig['zipSettings'] {
+  const base = createDefaultZipSettings();
+  const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+
+  for (const marketplace of MARKETPLACES) {
+    const rawSetting =
+      source[marketplace] && typeof source[marketplace] === 'object'
+        ? (source[marketplace] as Record<string, unknown>)
+        : {};
+    const defaultSetting = fallback[marketplace] ?? createDefaultMarketplaceZipSettings();
+
+    base[marketplace] = {
+      zipCode: normalizeZipCode(rawSetting.zipCode, defaultSetting.zipCode),
+      zipHomeWaitSec: clampZipWaitSec(rawSetting.zipHomeWaitSec, defaultSetting.zipHomeWaitSec),
+      zipModalWaitSec: clampZipWaitSec(rawSetting.zipModalWaitSec, defaultSetting.zipModalWaitSec),
+    };
+  }
+
+  return base;
+}
 
 export function clampZipWaitSec(value: unknown, fallback: number): number {
   const next = typeof value === 'number' ? value : Number(value);
@@ -70,9 +122,7 @@ export function getDefaultUserConfig(): UserConfig {
   return {
     headless: true,
     marketplace: 'us',
-    zipCode: DEFAULT_ZIP_CODE,
-    zipHomeWaitSec: DEFAULT_ZIP_HOME_WAIT_SEC,
-    zipModalWaitSec: DEFAULT_ZIP_MODAL_WAIT_SEC,
+    zipSettings: createDefaultZipSettings(),
     locale: 'en-US',
     activeGroupId: defaultGroup.id,
     groups: [defaultGroup],
@@ -118,6 +168,15 @@ export function resolveExcelPath(cfg: UserConfig): string {
 
 function migrateLegacy(raw: Record<string, unknown>, base: UserConfig): UserConfig {
   const next = { ...base };
+  const legacyZipSettings = createDefaultZipSettings();
+
+  for (const marketplace of MARKETPLACES) {
+    legacyZipSettings[marketplace] = {
+      zipCode: normalizeZipCode(raw.zipCode, base.zipSettings[marketplace].zipCode),
+      zipHomeWaitSec: clampZipWaitSec(raw.zipHomeWaitSec, base.zipSettings[marketplace].zipHomeWaitSec),
+      zipModalWaitSec: clampZipWaitSec(raw.zipModalWaitSec, base.zipSettings[marketplace].zipModalWaitSec),
+    };
+  }
 
   if (Array.isArray(raw.groups) && raw.groups.length > 0) {
     next.groups = (raw.groups as AsinGroup[]).map((group) => ({
@@ -140,11 +199,7 @@ function migrateLegacy(raw: Record<string, unknown>, base: UserConfig): UserConf
   if (typeof raw.headless === 'boolean') next.headless = raw.headless;
 
   next.marketplace = normalizeMarketplace(raw.marketplace);
-  if (typeof raw.zipCode === 'string' && /^\d{5}$/.test(raw.zipCode.trim())) {
-    next.zipCode = raw.zipCode.trim();
-  }
-  next.zipHomeWaitSec = clampZipWaitSec(raw.zipHomeWaitSec, next.zipHomeWaitSec);
-  next.zipModalWaitSec = clampZipWaitSec(raw.zipModalWaitSec, next.zipModalWaitSec);
+  next.zipSettings = normalizeZipSettings(raw.zipSettings, legacyZipSettings);
   return next;
 }
 
@@ -191,11 +246,7 @@ export function saveUserConfig(cfg: UserConfig): SaveConfigResult {
   const normalized: UserConfig = {
     headless: cfg.headless !== false,
     marketplace: normalizeMarketplace(cfg.marketplace),
-    zipCode: /^\d{5}$/.test(String(cfg.zipCode ?? '').trim())
-      ? String(cfg.zipCode).trim()
-      : DEFAULT_ZIP_CODE,
-    zipHomeWaitSec: clampZipWaitSec(cfg.zipHomeWaitSec, DEFAULT_ZIP_HOME_WAIT_SEC),
-    zipModalWaitSec: clampZipWaitSec(cfg.zipModalWaitSec, DEFAULT_ZIP_MODAL_WAIT_SEC),
+    zipSettings: normalizeZipSettings(cfg.zipSettings, createDefaultZipSettings()),
     locale: 'en-US',
     activeGroupId,
     groups,

@@ -7,12 +7,16 @@ export type AsinGroupPayload = {
   asins: string[];
 };
 
-export type UserConfigPayload = {
-  headless: boolean;
-  marketplace: 'us' | 'de' | 'fr' | 'it' | 'es';
+export type MarketplaceZipSettingsPayload = {
   zipCode: string;
   zipHomeWaitSec: number;
   zipModalWaitSec: number;
+};
+
+export type UserConfigPayload = {
+  headless: boolean;
+  marketplace: 'us' | 'de' | 'fr' | 'it' | 'es';
+  zipSettings: Record<'us' | 'de' | 'fr' | 'it' | 'es', MarketplaceZipSettingsPayload>;
   locale: 'en-US';
   activeGroupId: string;
   groups: AsinGroupPayload[];

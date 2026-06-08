@@ -14,9 +14,13 @@ const buildSummaryFromRunnableGroups: (
 const baseConfig: UserConfig = {
   headless: true,
   marketplace: 'us',
-  zipCode: '10001',
-  zipHomeWaitSec: 10,
-  zipModalWaitSec: 10,
+  zipSettings: {
+    us: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+    de: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+    fr: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+    it: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+    es: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+  },
   locale: 'en-US',
   activeGroupId: 'g-1',
   groups: [

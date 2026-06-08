@@ -91,7 +91,7 @@ async function saveFailureArtifacts(
 
   try {
     const marketplaceMeta = getAmazonMarketplaceMeta(marketplace);
-    if (marketplace === 'us' && sharedPage) {
+    if (sharedPage) {
       await sharedPage.goto(`${marketplaceMeta.dpBase}${asin}`, {
         waitUntil: 'domcontentloaded',
         timeout: 45_000,
@@ -229,6 +229,7 @@ app.whenReady().then(() => {
     const headless = cfg.headless !== false;
     const marketplace = cfg.marketplace;
     const marketplaceMeta = getAmazonMarketplaceMeta(marketplace);
+    const marketplaceZipSettings = cfg.zipSettings[marketplace];
     const totalAsins = groupsToRun.reduce((sum, group) => sum + group.asins.length, 0);
 
     logLine(`软件目录：${getAppRootDir()}`);
@@ -239,9 +240,7 @@ app.whenReady().then(() => {
       );
     }
     logLine(
-      `浏览器：${headless ? '无头' : '有头'} | 站点：${marketplaceMeta.label}（${marketplaceMeta.host}）${
-        marketplace === 'us' ? ` | 美国邮编：${cfg.zipCode}` : ''
-      }`,
+      `浏览器：${headless ? '无头' : '有头'} | 站点：${marketplaceMeta.label}（${marketplaceMeta.host}） | 配送邮编：${marketplaceZipSettings.zipCode}`,
     );
 
     let browser: Browser | null = null;
@@ -267,25 +266,25 @@ app.whenReady().then(() => {
       'Accept-Language': marketplaceMeta.acceptLanguage,
     });
 
-    if (marketplace === 'us') {
-      logLine('正在设置美国配送地址。');
-      logLine(`邮编等待：首页 ${cfg.zipHomeWaitSec}s -> 弹层 ${cfg.zipModalWaitSec}s`);
-      const { ensureAmazonUSDelivery } = await import('./crawler/amazonContext');
-      const zipOk = await ensureAmazonUSDelivery(sharedPage, cfg.zipCode, {
-        homeWaitMs: cfg.zipHomeWaitSec * 1_000,
-        modalWaitMs: cfg.zipModalWaitSec * 1_000,
+    {
+      logLine(`正在设置 ${marketplaceMeta.label} 站配送地址。`);
+      logLine(
+        `邮编等待：首页 ${marketplaceZipSettings.zipHomeWaitSec}s -> 弹层 ${marketplaceZipSettings.zipModalWaitSec}s`,
+      );
+      const { ensureAmazonDelivery } = await import('./crawler/amazonContext');
+      const zipOk = await ensureAmazonDelivery(sharedPage, marketplaceMeta, marketplaceZipSettings.zipCode, {
+        homeWaitMs: marketplaceZipSettings.zipHomeWaitSec * 1_000,
+        modalWaitMs: marketplaceZipSettings.zipModalWaitSec * 1_000,
       });
       if (!zipOk) {
-        const message = `美国邮编 ${cfg.zipCode} 设置失败，已停止本次同步，避免写入不可靠数据。`;
+        const message = `${marketplaceMeta.label}站邮编 ${marketplaceZipSettings.zipCode} 设置失败，已停止本次同步，避免写入不可靠数据。`;
         sendProgress({ type: 'error', message });
         logLine(message);
         await sharedPage?.close().catch(() => {});
         await browser?.close().catch(() => {});
         return { ok: false, error: message };
       }
-      logLine(`邮编已设置为 ${cfg.zipCode}，本轮分组会复用同一个浏览器页面。`);
-    } else {
-      logLine(`当前为 ${marketplaceMeta.label} 站，跳过美国邮编设置。`);
+      logLine(`邮编已设置为 ${marketplaceZipSettings.zipCode}，本轮分组会复用同一个浏览器会话。`);
     }
 
     let hadFailure = false;

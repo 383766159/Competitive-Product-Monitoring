@@ -2,13 +2,21 @@ type TrackerStub = Window['tracker'];
 
 type TrackerOverrides = Partial<TrackerStub>;
 
+function createDefaultZipSettings() {
+  return {
+    us: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+    de: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+    fr: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+    it: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+    es: { zipCode: '10001', zipHomeWaitSec: 10, zipModalWaitSec: 10 },
+  } as const;
+}
+
 function createDefaultConfig(): Awaited<ReturnType<TrackerStub['getConfig']>> {
   return {
     headless: true,
     marketplace: 'us',
-    zipCode: '10001',
-    zipHomeWaitSec: 10,
-    zipModalWaitSec: 10,
+    zipSettings: createDefaultZipSettings(),
     locale: 'en-US',
     activeGroupId: 'group-1',
     groups: [{ id: 'group-1', name: '默认分组', asins: ['B0AAAAAA01'] }],
