@@ -304,6 +304,36 @@ export async function extractStrikePrice(page: Page): Promise<string> {
       return match ? match[0].replace(/\u00a0/g, ' ').replace(/\s+/g, '').trim() : '';
     };
 
+    const strikeLabelPattern =
+      /list\s*price|was|typical\s*price|uvp|rrp|statt|preisempfehl|prix\s+conseill|precio\s+recomendado|precio\s+anterior|prezzo\s+consigliato/i;
+
+    const hasLineThrough = (element: Element): boolean => {
+      let current: Element | null = element;
+      for (let depth = 0; depth < 4 && current; depth += 1) {
+        const inline = current.getAttribute('style') || '';
+        if (/line-through/i.test(inline)) return true;
+        const style = window.getComputedStyle?.(current);
+        if (style && /line-through/i.test(style.textDecorationLine || style.textDecoration || '')) return true;
+        current = current.parentElement;
+      }
+      return false;
+    };
+
+    const isStrikeCandidate = (element: Element): boolean => {
+      if (
+        element.closest(
+          '.apex-basisprice-value, #basisPrice_feature_div, #listPrice_feature_div, .basisPrice, [data-a-strike="true"]',
+        )
+      ) {
+        return true;
+      }
+
+      if (hasLineThrough(element)) return true;
+
+      const row = element.closest('.a-row, .a-section, tr, li, span, div') || element;
+      return strikeLabelPattern.test(row.textContent || '');
+    };
+
     const roots = [
       document.querySelector('.apex-basisprice-value'),
       document.querySelector('#basisPrice_feature_div'),
@@ -315,32 +345,38 @@ export async function extractStrikePrice(page: Page): Promise<string> {
 
     for (const root of roots) {
       if (!root) continue;
-      const offscreen = root.querySelector(
+      const offscreenNodes = root.querySelectorAll(
         '.apex-basisprice-value .a-offscreen, .a-text-price .a-offscreen, [data-a-strike="true"] .a-offscreen, .basisPrice .a-offscreen',
       );
-      if (offscreen?.textContent) {
-        const token = pickMoney(offscreen.textContent);
+      for (const offscreen of offscreenNodes) {
+        if (!isStrikeCandidate(offscreen)) continue;
+        const token = pickMoney(offscreen.textContent || '');
         if (token) return token;
       }
 
-      const row = root.querySelector('.a-text-price, [data-a-strike="true"], .basisPrice');
-      if (row?.textContent) {
+      const rows = root.querySelectorAll('.a-text-price, [data-a-strike="true"], .basisPrice');
+      for (const row of rows) {
+        if (!isStrikeCandidate(row)) continue;
         const token = pickMoney(row.textContent);
         if (token) return token;
       }
     }
 
-    const body = document.body.innerText || '';
-    const was =
-      /(?:List\s*Price|Was|Typical\s*price|UVP|Prix conseillé|Precio recomendado|Prezzo consigliato)\s*:\s*((?:[$€£]\s*[\d.,]+|[\d.,]+\s*[$€£]))/i.exec(
-        body,
-      );
-    if (was) return was[1].replace(/\s/g, '');
+    const bodyLines = (document.body.innerText || '')
+      .split(/\r?\n/)
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .filter((line) => line.length > 0 && line.length < 180);
+    for (const line of bodyLines) {
+      if (!strikeLabelPattern.test(line)) continue;
+      const token = pickMoney(line);
+      if (token) return token;
+    }
 
     const prices = document.querySelectorAll(
       '#corePriceDisplay_desktop_feature_div .a-text-price .a-offscreen, #corePrice_feature_div .a-text-price .a-offscreen',
     );
     for (const price of prices) {
+      if (!isStrikeCandidate(price)) continue;
       const token = pickMoney(price.textContent || '');
       if (token) return token;
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isCouponPromotionText, isLimitedTimeDealText, isPrimeMemberPriceText } from './promotions';
+import { extractPromotions, isCouponPromotionText, isLimitedTimeDealText, isPrimeMemberPriceText } from './promotions';
 
 describe('promotion text classifiers', () => {
   it('detects Prime member price labels across marketplaces', () => {
@@ -24,5 +24,28 @@ describe('promotion text classifiers', () => {
     expect(isCouponPromotionText('Appliquer le coupon')).toBe(true);
     expect(isCouponPromotionText('Applica buono sconto')).toBe(true);
     expect(isCouponPromotionText('Aplicar cupón')).toBe(true);
+  });
+
+  it('does not treat unrelated page chrome coupon text as a product promotion', async () => {
+    document.body.innerHTML = `
+      <main id="centerCol">
+        <div id="corePriceDisplay_desktop_feature_div">
+          <span class="a-price"><span class="a-offscreen">17,99 €</span></span>
+        </div>
+      </main>
+      <footer>
+        <a href="/geschenkgutscheine">Amazon Gutschein kaufen</a>
+      </footer>
+    `;
+    Object.defineProperty(document.body, 'innerText', {
+      configurable: true,
+      value: '17,99 € Amazon Gutschein kaufen',
+    });
+
+    const page = {
+      evaluate: async <T>(fn: (arg: T) => string, arg: T) => fn(arg),
+    };
+
+    await expect(extractPromotions(page as never)).resolves.toBe('/');
   });
 });

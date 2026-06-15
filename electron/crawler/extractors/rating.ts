@@ -1,20 +1,33 @@
 import type { Page } from 'playwright';
 
+export function normalizeAmazonRatingText(value: string): string {
+  const text = value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  const patterns = [
+    /(\d+(?:[.,]\d+)?)\s*out of\s*5/i,
+    /(\d+(?:[.,]\d+)?)\s*(?:von|sur|su|de)\s*5/i,
+    /(\d+(?:[.,]\d+)?)\s*(?:星|stelle|sternen|étoiles?|etoiles?|stelle|estrellas?)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1].replace(',', '.');
+  }
+
+  const fallback = text.match(/(\d+(?:[.,]\d+)?)/);
+  return fallback?.[1]?.replace(',', '.') || '';
+}
+
 export async function extractRating(page: Page): Promise<string> {
-  return page.evaluate(() => {
+  return page.evaluate((normalizeSource) => {
+    const normalizeRating = new Function(`return ${normalizeSource}`)() as (value: string) => string;
     const pop = document.querySelector('#acrPopover, [data-hook="rating-out-of-text"]');
     const aria = pop?.getAttribute('aria-label') || pop?.textContent || '';
-    let m = aria.match(/(\d+(?:\.\d+)?)\s*out of\s*5/i);
-    if (m) return m[1];
-    m = aria.match(/(\d+(?:\.\d+)?)\s*[\u661f\u2022]/);
-    if (m) return m[1];
+    const popRating = normalizeRating(aria);
+    if (popRating) return popRating;
+
     const span = document.querySelector('span.a-icon-alt');
-    if (span?.textContent) {
-      const mm = span.textContent.match(/(\d+(?:\.\d+)?)/);
-      if (mm) return mm[1];
-    }
-    return '';
-  });
+    return normalizeRating(span?.textContent || '');
+  }, normalizeAmazonRatingText.toString());
 }
 
 export async function extractReviewCount(page: Page): Promise<string> {

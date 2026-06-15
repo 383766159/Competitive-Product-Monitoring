@@ -121,16 +121,28 @@ export async function extractPromotions(page: Page): Promise<string> {
       parts.push(`${hasLightningStyleProgress(anchor) ? 'LD' : 'BD'}：${mainPrice || '/'}`);
     }
 
-    const bodyText = document.body.innerText || '';
-    const couponEl =
+    const directCouponEl =
       document.querySelector('#promoPriceBlockMessage, #couponText, .couponLabelText, [data-coupon-id]') ||
-      Array.from(document.querySelectorAll('label, span')).find((el) => {
+      null;
+    const couponScopes = [
+      document.querySelector('#corePriceDisplay_desktop_feature_div'),
+      document.querySelector('#corePrice_feature_div'),
+      document.querySelector('#promoPriceBlockMessage'),
+      document.querySelector('#desktop_buybox'),
+      document.querySelector('#buybox'),
+      document.querySelector('#rightCol'),
+      document.querySelector('#centerCol'),
+    ].filter((scope): scope is Element => !!scope);
+    const scopedCouponEl = couponScopes
+      .flatMap((scope) => Array.from(scope.querySelectorAll('label, span, i, div')))
+      .find((el) => {
         const text = el.textContent || '';
         return text.length < 140 && isCouponText(text);
       });
+    const couponEl = directCouponEl || scopedCouponEl;
 
-    if (couponEl || isCouponText(bodyText)) {
-      const raw = (couponEl?.textContent || bodyText).slice(0, 500);
+    if (couponEl) {
+      const raw = (couponEl.textContent || '').slice(0, 500);
       const pct = raw.match(/(\d+)\s*%/);
       const amount = raw.match(moneyPattern);
       if (pct) parts.push(`Coupon：${pct[1]}%`);
