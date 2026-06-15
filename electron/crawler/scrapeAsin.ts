@@ -50,19 +50,33 @@ const defaultSnap = (asin: string, err?: string): AsinSnapshot => ({
   error: err,
 });
 
+export function inspectAmazonPageText(value: string): { hasCaptcha: boolean; isUnavailable: boolean } {
+  const text = value.replace(/\s+/g, ' ');
+  return {
+    hasCaptcha:
+      /enter\s+the\s+characters\s+you\s+see\s+below|type\s+the\s+characters\s+you\s+see\s+in\s+this\s+image|gib\s+die\s+zeichen\s+ein|saisissez\s+les\s+caract[eè]res|inserisci\s+i\s+caratteri|introduce\s+los\s+caracteres/i.test(
+        text,
+      ),
+    isUnavailable:
+      /currently\s+unavailable|we\s+couldn't\s+find\s+that\s+page|dogs\s+of\s+amazon|sorry!\s+we\s+just\s+need\s+to\s+make\s+sure|derzeit\s+nicht\s+verf[uü]gbar|actuellement\s+indisponible|non\s+disponibile|no\s+disponible\s+actualmente|no\s+disponible/i.test(
+        text,
+      ),
+  };
+}
+
 async function inspectPageState(page: Page): Promise<{ hasCaptcha: boolean; isUnavailable: boolean }> {
-  return page.evaluate(() => {
-    const text = (document.body.innerText || '').replace(/\s+/g, ' ');
-    return {
-      hasCaptcha:
-        !!document.querySelector('#captchacharacters') ||
-        /enter the characters you see below|type the characters you see in this image/i.test(text),
-      isUnavailable:
-        /currently unavailable|we couldn't find that page|dogs of amazon|sorry! we just need to make sure/i.test(
-          text,
-        ),
+  return page.evaluate((inspectSource) => {
+    const inspectText = new Function(`return ${inspectSource}`)() as (value: string) => {
+      hasCaptcha: boolean;
+      isUnavailable: boolean;
     };
-  });
+    const text = (document.body.innerText || '').replace(/\s+/g, ' ');
+    const state = inspectText(text);
+    return {
+      hasCaptcha: !!document.querySelector('#captchacharacters') || state.hasCaptcha,
+      isUnavailable: state.isUnavailable,
+    };
+  }, inspectAmazonPageText.toString());
 }
 
 export async function scrapeAsinOnPage(

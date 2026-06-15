@@ -306,10 +306,7 @@ app.whenReady().then(() => {
           sendProgress({ type: 'asin-start', asin, groupId: group.id });
           logLine(`[${group.name}] 开始抓取 ${asin}`);
 
-          const scrapeOnce = () =>
-            marketplace === 'us'
-              ? scrapeAsinOnPage(sharedPage!, asin, { marketplace })
-              : withBrowser(browser!, (page) => scrapeAsinOnPage(page, asin, { marketplace }), marketplace);
+          const scrapeOnce = () => scrapeAsinOnPage(sharedPage!, asin, { marketplace });
 
           let snapshot = await scrapeOnce();
           let attempt = 1;

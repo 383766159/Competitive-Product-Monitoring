@@ -1,57 +1,71 @@
 import type { Page } from 'playwright';
 
-/**
- * 大类 / 小类 BSR：优先从「Best Sellers Rank」区块解析两行排名；
- * 格式 `#50989#83`（前者多大类，后者小类；与手工表一致无斜杠）。
- */
-export async function extractRank(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const normalizeRank = (n: string) => '#' + n.replace(/[,.]/g, '');
+export function textHasAmazonRankLabel(value: string): boolean {
+  const text = value.replace(/\s+/g, ' ').trim();
+  return (
+    /best\s+sellers\s+rank/i.test(text) ||
+    /bestseller[\s-]*rang/i.test(text) ||
+    /classement\s+des\s+meilleures\s+ventes/i.test(text) ||
+    /classifica\s+bestseller/i.test(text) ||
+    /clasificaci[oó]n\s+(?:en|de)\s+los\s+m[aá]s\s+vendidos/i.test(text)
+  );
+}
 
-    /** 在指定容器内按出现顺序收集 #数字 */
-    const parseRanksFromText = (text: string): string[] => {
-      const out: string[] = [];
-      const re = /(?:#|Nr\.?|n[º°.]?)\s*([\d,.]+)\s+(?:in|en|dans)\s+/gi;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(text)) !== null) {
-        const num = normalizeRank(m[1]);
-        if (!out.includes(num)) out.push(num);
-      }
-      return out;
+export function parseAmazonRanksFromText(value: string): string[] {
+  const text = value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ');
+  const ranks: string[] = [];
+  const rankPattern =
+    /(?:#|Nr\.?|n[°º.]?|N[°º.]?)\s*([\d][\d.,\s]*?)\s+(?=in\b|en\b|dans\b|em\b|nel\b|nella\b|nello\b|de\b)/giu;
+
+  let match: RegExpExecArray | null;
+  while ((match = rankPattern.exec(text)) !== null) {
+    const digits = match[1].replace(/\D/g, '');
+    if (!digits) continue;
+
+    const rank = `#${digits}`;
+    if (!ranks.includes(rank)) ranks.push(rank);
+  }
+
+  return ranks;
+}
+
+export async function extractRank(page: Page): Promise<string> {
+  return page.evaluate(({ parseSource, labelSource }) => {
+    const parseRanks = new Function(`return ${parseSource}`)() as (value: string) => string[];
+    const hasRankLabel = new Function(`return ${labelSource}`)() as (value: string) => boolean;
+
+    const formatRanks = (ranks: string[]): string => {
+      if (ranks.length >= 2) return `${ranks[0]}${ranks[1]}`;
+      return ranks[0] || '';
     };
 
-    /** 定位包含 Best Sellers Rank 的整块文案（避免扫到页面其它 #xxx） */
     const rankRoots: Element[] = [];
     const candidates = document.querySelectorAll(
-      '#detailBullets_feature_div li, #detailBulletsWrapper_feature_div li, #prodDetails li, #productDetails_detailBullets_sections1 li',
+      '#detailBullets_feature_div li, #detailBulletsWrapper_feature_div li, #prodDetails li, #productDetails_detailBullets_sections1 li, #productDetails_db_sections tr',
     );
-    for (const li of candidates) {
-      const t = li.textContent || '';
-      if (/best\s+sellers\s+rank/i.test(t) || /amazon\s+best\s+sellers\s+rank/i.test(t)) {
-        rankRoots.push(li);
-      }
+    for (const node of candidates) {
+      const text = node.textContent || '';
+      if (hasRankLabel(text)) rankRoots.push(node);
     }
 
     if (rankRoots.length > 0) {
-      const ranks = parseRanksFromText(rankRoots.map((el) => el.textContent || '').join('\n'));
-      if (ranks.length >= 2) return `${ranks[0]}${ranks[1]}`;
-      if (ranks.length === 1) return ranks[0];
+      const ranks = parseRanks(rankRoots.map((el) => el.textContent || '').join('\n'));
+      const formatted = formatRanks(ranks);
+      if (formatted) return formatted;
     }
 
-    const salesRank = document.querySelector('#SalesRank');
-    if (salesRank) {
-      const ranks = parseRanksFromText(salesRank.textContent || '');
-      if (ranks.length >= 2) return `${ranks[0]}${ranks[1]}`;
-      if (ranks.length === 1) return ranks[0];
-    }
-
-    const bullets = document.querySelector('#detailBullets_feature_div, #prodDetails');
-    if (bullets) {
-      const ranks = parseRanksFromText(bullets.textContent || '');
-      if (ranks.length >= 2) return `${ranks[0]}${ranks[1]}`;
-      if (ranks.length === 1) return ranks[0];
+    for (const selector of ['#SalesRank', '#detailBullets_feature_div', '#prodDetails']) {
+      const node = document.querySelector(selector);
+      if (!node) continue;
+      const text = node.textContent || '';
+      if (!hasRankLabel(text) && selector !== '#SalesRank') continue;
+      const formatted = formatRanks(parseRanks(text));
+      if (formatted) return formatted;
     }
 
     return '';
+  }, {
+    parseSource: parseAmazonRanksFromText.toString(),
+    labelSource: textHasAmazonRankLabel.toString(),
   });
 }
